@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { synapse } from '@/lib/synapse-client';
+import { base44 } from '@/api/base44Client';
 import { ArrowLeft, Plus, Trash2, Edit3, Loader2, ExternalLink, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -70,6 +71,12 @@ export default function NodeDetail() {
 
   useEffect(() => {
     loadData();
+  }, [nodeId]);
+
+  useEffect(() => {
+    const unsubNode = base44.entities.GraphNode.subscribe(() => loadData());
+    const unsubEdge = base44.entities.GraphEdge.subscribe(() => loadData());
+    return () => { unsubNode(); unsubEdge(); };
   }, [nodeId]);
 
   const handleAddEdge = async () => {

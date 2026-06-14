@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { synapse } from '@/lib/synapse-client';
+import { base44 } from '@/api/base44Client';
 import { Plus, ZoomIn, ZoomOut, Maximize2, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -138,6 +139,13 @@ export default function Home() {
 
   useEffect(() => {
     loadData();
+  }, [loadData]);
+
+  // Real-time subscriptions — refresh graph when any node or edge changes
+  useEffect(() => {
+    const unsubNode = base44.entities.GraphNode.subscribe(() => loadData());
+    const unsubEdge = base44.entities.GraphEdge.subscribe(() => loadData());
+    return () => { unsubNode(); unsubEdge(); };
   }, [loadData]);
 
   useEffect(() => {

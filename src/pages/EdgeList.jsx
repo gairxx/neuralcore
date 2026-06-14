@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { synapse } from '@/lib/synapse-client';
+import { base44 } from '@/api/base44Client';
 import { Trash2, Loader2, ExternalLink } from 'lucide-react';
 
 const RELATIONSHIP_LABELS = {
@@ -35,6 +36,12 @@ export default function EdgeList() {
 
   useEffect(() => {
     loadData();
+  }, []);
+
+  useEffect(() => {
+    const unsubNode = base44.entities.GraphNode.subscribe(() => loadData());
+    const unsubEdge = base44.entities.GraphEdge.subscribe(() => loadData());
+    return () => { unsubNode(); unsubEdge(); };
   }, []);
 
   const getNodeName = (id) => {

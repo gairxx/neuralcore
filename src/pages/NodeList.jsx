@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { synapse } from '@/lib/synapse-client';
+import { base44 } from '@/api/base44Client';
 import { Search, Loader2, ExternalLink } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 
@@ -21,11 +22,15 @@ export default function NodeList() {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
 
+  const loadNodes = () => synapse.listNodes().then((data) => setNodes(data.nodes || []));
+
   useEffect(() => {
-    synapse.listNodes().then((data) => {
-      setNodes(data.nodes || []);
-      setLoading(false);
-    });
+    loadNodes().then(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    const unsub = base44.entities.GraphNode.subscribe(() => loadNodes());
+    return () => unsub();
   }, []);
 
   const filtered = nodes.filter((n) => {
