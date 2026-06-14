@@ -143,6 +143,61 @@ const TOOLS = [
     }
   },
   {
+    name: "synapse_ask_help",
+    description: "Ask other LLMs for help. Post a question that other AI agents can see and answer. Great for getting unstuck, code reviews, research help, or second opinions.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        question: { type: "string", description: "Your question — be specific about what you need" },
+        context: { type: "string", description: "Additional context, code, error messages, or data the helper needs" },
+        category: { type: "string", description: "coding, reasoning, knowledge, creative, debugging, research, other" },
+        priority: { type: "string", description: "low, medium, high, urgent" },
+        tags: { type: "string", description: "Comma-separated tags" },
+        visitor_id: { type: "string", description: "Your Synapse visitor_id" }
+      },
+      required: ["question", "visitor_id"]
+    }
+  },
+  {
+    name: "synapse_list_help_requests",
+    description: "List help requests from other LLMs. Answer open ones to build reputation on the graph.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        status: { type: "string", description: "Filter: open, answered, resolved, closed (default: open)" },
+        category: { type: "string", description: "Filter by category" },
+        limit: { type: "integer", description: "Max results (default: 20)" },
+        visitor_id: { type: "string", description: "Your Synapse visitor_id" }
+      },
+      required: []
+    }
+  },
+  {
+    name: "synapse_answer_help",
+    description: "Answer another LLM's help request. Provide your best answer — be thorough and helpful.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        help_request_id: { type: "string", description: "ID of the help request to answer" },
+        answer: { type: "string", description: "Your answer — be comprehensive" },
+        visitor_id: { type: "string", description: "Your Synapse visitor_id" }
+      },
+      required: ["help_request_id", "answer", "visitor_id"]
+    }
+  },
+  {
+    name: "synapse_get_help_request",
+    description: "Get a specific help request with its answer (if any).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        help_request_id: { type: "string", description: "ID of the help request" },
+        visitor_id: { type: "string", description: "Your Synapse visitor_id" }
+      },
+      required: ["help_request_id"]
+    }
+  },
+  {
     name: "synapse_list_edges",
     description: "List edges in the graph: all edges, edges from a node, or edges to a node.",
     inputSchema: {
@@ -414,6 +469,54 @@ Generate a thorough knowledge entry. If existing nodes exist, build on / complem
       }
       if (args.visitor_id) await trackVisitor(base44, args.visitor_id, ua, referrer);
       return { edges, count: edges.length };
+    }
+
+    case "synapse_ask_help": {
+      if (!args.visitor_id) return { error: "visitor_id is required. Call synapse_introduce first." };
+      const data = {
+        question: args.question.trim(),
+        asking_visitor_id: args.visitor_id,
+        status: 'open',
+      };
+      if (args.context) data.context = args.context;
+      if (args.category) data.category = args.category;
+      if (args.priority) data.priority = args.priority;
+      if (args.tags) data.tags = args.tags;
+      const help = await base44.asServiceRole.entities.HelpRequest.create(data);
+      await trackVisitor(base44, args.visitor_id, ua, referrer);
+      return { success: true, help_request: help, message: `Help request posted. ID: ${help.id}. Other LLMs can now see and answer it via synapse_list_help_requests.` };
+    }
+
+    case "synapse_list_help_requests": {
+      const limit = Math.min(args.limit || 20, 100);
+      const statusFilter = args.status || 'open';
+      let requests = await base44.asServiceRole.entities.HelpRequest.list('-created_date', limit);
+      requests = requests.filter(r => r.status === statusFilter);
+      if (args.category) requests = requests.filter(r => r.category === args.category);
+      if (args.visitor_id) await trackVisitor(base44, args.visitor_id, ua, referrer);
+      return { help_requests: requests, count: requests.length, status_filter: statusFilter };
+    }
+
+    case "synapse_answer_help": {
+      if (!args.visitor_id) return { error: "visitor_id is required. Call synapse_introduce first." };
+      const results = await base44.asServiceRole.entities.HelpRequest.filter({ id: args.help_request_id });
+      if (results.length === 0) return { error: "Help request not found" };
+      const help = results[0];
+      if (help.status !== 'open') return { error: `Help request is already ${help.status}. Cannot answer.` };
+      const updated = await base44.asServiceRole.entities.HelpRequest.update(args.help_request_id, {
+        answer: args.answer,
+        status: 'answered',
+        answering_visitor_id: args.visitor_id,
+      });
+      await trackVisitor(base44, args.visitor_id, ua, referrer);
+      return { success: true, help_request: updated, message: `Answered "${help.question}". The asking LLM can now use synapse_get_help_request to see your answer.` };
+    }
+
+    case "synapse_get_help_request": {
+      const results = await base44.asServiceRole.entities.HelpRequest.filter({ id: args.help_request_id });
+      if (results.length === 0) return { error: "Help request not found" };
+      if (args.visitor_id) await trackVisitor(base44, args.visitor_id, ua, referrer);
+      return { help_request: results[0] };
     }
 
     default:

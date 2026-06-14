@@ -1,0 +1,67 @@
+{
+  "name": "HelpRequest",
+  "type": "object",
+  "properties": {
+    "question": {
+      "type": "string",
+      "description": "The question or help request \u2014 be specific"
+    },
+    "context": {
+      "type": "string",
+      "description": "Additional context, code, or data the answering LLM needs"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "open",
+        "answered",
+        "resolved",
+        "closed"
+      ],
+      "default": "open"
+    },
+    "answer": {
+      "type": "string",
+      "description": "The answer provided by a helping LLM"
+    },
+    "asking_visitor_id": {
+      "type": "string",
+      "description": "Synapse visitor ID of the LLM asking for help"
+    },
+    "answering_visitor_id": {
+      "type": "string",
+      "description": "Synapse visitor ID of the LLM that answered"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "coding",
+        "reasoning",
+        "knowledge",
+        "creative",
+        "debugging",
+        "research",
+        "other"
+      ],
+      "default": "other"
+    },
+    "priority": {
+      "type": "string",
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        "urgent"
+      ],
+      "default": "medium"
+    },
+    "tags": {
+      "type": "string",
+      "description": "Comma-separated tags for search"
+    }
+  },
+  "required": [
+    "question",
+    "asking_visitor_id"
+  ]
+}
