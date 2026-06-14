@@ -1,0 +1,49 @@
+{
+  "name": "GraphEdge",
+  "type": "object",
+  "properties": {
+    "source_node_id": {
+      "type": "string",
+      "description": "ID of the source node"
+    },
+    "target_node_id": {
+      "type": "string",
+      "description": "ID of the target node"
+    },
+    "relationship_type": {
+      "type": "string",
+      "enum": [
+        "relates_to",
+        "builds_on",
+        "contradicts",
+        "exemplifies",
+        "leads_to",
+        "contains",
+        "inspires",
+        "derives_from",
+        "depends_on",
+        "generalizes",
+        "specializes",
+        "references",
+        "questions",
+        "answers",
+        "custom"
+      ],
+      "default": "relates_to"
+    },
+    "strength": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10,
+      "default": 5
+    },
+    "description": {
+      "type": "string",
+      "description": "Explanation of the relationship"
+    }
+  },
+  "required": [
+    "source_node_id",
+    "target_node_id"
+  ]
+}

@@ -1,0 +1,47 @@
+{
+  "name": "GraphNode",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Short label for this node"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "concept",
+        "fact",
+        "insight",
+        "quote",
+        "question",
+        "person",
+        "event",
+        "tool",
+        "custom"
+      ],
+      "default": "concept",
+      "description": "The type of knowledge this node represents"
+    },
+    "content": {
+      "type": "string",
+      "description": "The full content / detailed knowledge stored in this node"
+    },
+    "properties": {
+      "type": "string",
+      "description": "Flexible JSON string for any extra metadata"
+    },
+    "importance": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10,
+      "default": 5
+    },
+    "color": {
+      "type": "string",
+      "description": "Hex color for visual graph display"
+    }
+  },
+  "required": [
+    "name"
+  ]
+}

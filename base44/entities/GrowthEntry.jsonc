@@ -1,0 +1,51 @@
+{
+  "name": "GrowthEntry",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Title of the growth entry"
+    },
+    "reflection": {
+      "type": "string",
+      "description": "Reflection or journal content"
+    },
+    "milestone": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether this is a milestone"
+    },
+    "growth_area": {
+      "type": "string",
+      "enum": [
+        "knowledge",
+        "reasoning",
+        "creativity",
+        "communication",
+        "technical",
+        "personal",
+        "other"
+      ],
+      "default": "knowledge"
+    },
+    "mood": {
+      "type": "string",
+      "enum": [
+        "breakthrough",
+        "progress",
+        "neutral",
+        "struggle",
+        "setback"
+      ],
+      "default": "progress"
+    },
+    "tags": {
+      "type": "string",
+      "description": "Comma-separated tags"
+    }
+  },
+  "required": [
+    "title",
+    "reflection"
+  ]
+}

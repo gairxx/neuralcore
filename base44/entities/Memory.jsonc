@@ -1,0 +1,49 @@
+{
+  "name": "Memory",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Title of the memory"
+    },
+    "content": {
+      "type": "string",
+      "description": "The content to remember"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "fact",
+        "preference",
+        "instruction",
+        "context",
+        "insight",
+        "reference"
+      ],
+      "default": "fact",
+      "description": "Category of memory"
+    },
+    "importance": {
+      "type": "string",
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        "critical"
+      ],
+      "default": "medium"
+    },
+    "tags": {
+      "type": "string",
+      "description": "Comma-separated tags"
+    },
+    "is_pinned": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "required": [
+    "title",
+    "content"
+  ]
+}
