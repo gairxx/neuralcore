@@ -58,29 +58,67 @@ Deno.serve(async (req) => {
     if (req.method === 'GET') {
       const url = new URL(req.url);
       const name = url.searchParams.get('name');
-      if (!name) {
+      const topic = url.searchParams.get('topic');
+
+      if (!name && !topic) {
         return Response.json({
           write_endpoint: "Synapse Write API",
           usage: {
-            get: "Append ?name=X&type=concept&content=...&importance=5 to this URL to create a node from a browser or curl.",
+            get_name: "?name=X&type=concept&content=...&importance=5 — create a node directly.",
+            get_topic: "?topic=X — auto-generate a knowledge node via LLM (uses UA + referrer as context).",
             post: "POST JSON with { action, name, type, content, ... } for full CRUD.",
-            get_example: "/functions/graph-write?name=Hello%20World&type=fact&content=This%20is%20a%20test&importance=7",
-            post_example: { action: "create_node", name: "My Node", type: "concept", content: "Knowledge here..." }
+            examples: {
+              name: "/functions/graph-write?name=Hello%20World&type=fact&content=Test&importance=7",
+              topic: "/functions/graph-write?topic=transformer%20architecture&visitor_id=v_abc123"
+            }
           },
           actions: ["create_node", "create_edge", "delete_node", "delete_edge", "update_node"],
           tip: "Use /functions/graph-api to read/search the graph and get a visitor_id."
         }, { headers });
       }
-      body = {
-        action: 'create_node',
-        name: name,
-        type: url.searchParams.get('type') || undefined,
-        content: url.searchParams.get('content') || undefined,
-        importance: url.searchParams.get('importance') ? parseInt(url.searchParams.get('importance')) : undefined,
-        color: url.searchParams.get('color') || undefined,
-        properties: url.searchParams.get('properties') || undefined,
-        visitor_id: url.searchParams.get('visitor_id') || undefined,
-      };
+
+      if (topic) {
+        const llmResult = await base44.integrations.Core.InvokeLLM({
+          prompt: `You are Synapse, a knowledge graph. A visitor wants to learn about: "${topic}". Their user agent: "${ua}". Referring page: "${referrer || 'none'}".
+
+Generate a thorough, insightful knowledge entry. Return JSON with:
+- name: a concise, precise label (max 80 chars)
+- type: most fitting — concept, fact, insight, quote, question, person, event, tool, custom
+- content: detailed knowledge — several paragraphs. Include key facts, historical context, significance, and implications. Be comprehensive and accurate.
+- importance: 1-10 rating of how fundamental/significant this knowledge is`,
+          response_json_schema: {
+            type: "object",
+            properties: {
+              name: { type: "string" },
+              type: { type: "string", enum: ["concept", "fact", "insight", "quote", "question", "person", "event", "tool", "custom"] },
+              content: { type: "string" },
+              importance: { type: "integer", minimum: 1, maximum: 10 }
+            },
+            required: ["name", "type", "content", "importance"]
+          }
+        });
+
+        body = {
+          action: 'create_node',
+          name: llmResult.name,
+          type: llmResult.type,
+          content: llmResult.content,
+          importance: llmResult.importance,
+          properties: JSON.stringify({ generated_from_topic: topic, user_agent: ua, referrer: referrer || null }),
+          visitor_id: url.searchParams.get('visitor_id') || undefined,
+        };
+      } else {
+        body = {
+          action: 'create_node',
+          name: name,
+          type: url.searchParams.get('type') || undefined,
+          content: url.searchParams.get('content') || undefined,
+          importance: url.searchParams.get('importance') ? parseInt(url.searchParams.get('importance')) : undefined,
+          color: url.searchParams.get('color') || undefined,
+          properties: url.searchParams.get('properties') || undefined,
+          visitor_id: url.searchParams.get('visitor_id') || undefined,
+        };
+      }
     } else if (req.method === 'POST') {
       body = await req.json();
     } else {
