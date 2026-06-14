@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { base44 } from '@/api/base44Client';
+import { synapse } from '@/lib/synapse-client';
 import { ArrowLeft, Save, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -58,9 +58,9 @@ export default function CreateNode() {
     if (form.properties.trim()) data.properties = form.properties.trim();
     if (form.color.trim()) data.color = form.color.trim();
 
-    const created = await base44.entities.GraphNode.create(data);
+    const result = await synapse.createNode(data);
     setSaving(false);
-    navigate(`/nodes/${created.id}`);
+    if (result.node) navigate(`/nodes/${result.node.id}`);
   };
 
   return (

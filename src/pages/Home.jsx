@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { base44 } from '@/api/base44Client';
+import { synapse } from '@/lib/synapse-client';
 import { Plus, ZoomIn, ZoomOut, Maximize2, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -130,12 +130,9 @@ export default function Home() {
 
   const loadData = useCallback(async () => {
     setLoading(true);
-    const [nodeList, edgeList] = await Promise.all([
-      base44.entities.GraphNode.list(),
-      base44.entities.GraphEdge.list(),
-    ]);
-    setNodes(nodeList);
-    setEdges(edgeList);
+    const data = await synapse.listAll();
+    setNodes(data.nodes || []);
+    setEdges(data.edges || []);
     setLoading(false);
   }, []);
 

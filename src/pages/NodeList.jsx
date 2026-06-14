@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { base44 } from '@/api/base44Client';
+import { synapse } from '@/lib/synapse-client';
 import { Search, Loader2, ExternalLink } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 
@@ -22,8 +22,8 @@ export default function NodeList() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    base44.entities.GraphNode.list('-created_date').then((data) => {
-      setNodes(data);
+    synapse.listNodes().then((data) => {
+      setNodes(data.nodes || []);
       setLoading(false);
     });
   }, []);

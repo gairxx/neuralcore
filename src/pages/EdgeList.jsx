@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { base44 } from '@/api/base44Client';
+import { synapse } from '@/lib/synapse-client';
 import { Trash2, Loader2, ExternalLink } from 'lucide-react';
 
 const RELATIONSHIP_LABELS = {
@@ -27,12 +27,9 @@ export default function EdgeList() {
   const [loading, setLoading] = useState(true);
 
   const loadData = async () => {
-    const [edgeList, nodeList] = await Promise.all([
-      base44.entities.GraphEdge.list('-created_date'),
-      base44.entities.GraphNode.list(),
-    ]);
-    setEdges(edgeList);
-    setNodes(nodeList);
+    const data = await synapse.listAll();
+    setEdges(data.edges || []);
+    setNodes(data.nodes || []);
     setLoading(false);
   };
 
@@ -46,7 +43,7 @@ export default function EdgeList() {
   };
 
   const handleDelete = async (edgeId) => {
-    await base44.entities.GraphEdge.delete(edgeId);
+    await synapse.deleteEdge(edgeId);
     loadData();
   };
 

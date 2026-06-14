@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { base44 } from '@/api/base44Client';
+import { synapse } from '@/lib/synapse-client';
 import { ArrowLeft, Plus, Trash2, Edit3, Loader2, ExternalLink, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -56,24 +56,15 @@ export default function NodeDetail() {
 
   const loadData = async () => {
     setLoading(true);
-    const [n, allEdges, allNs] = await Promise.all([
-      base44.entities.GraphNode.filter({ id: nodeId }),
-      base44.entities.GraphEdge.list(),
-      base44.entities.GraphNode.list(),
+    const [nodeData, allData] = await Promise.all([
+      synapse.getNode(nodeId),
+      synapse.listAll(),
     ]);
-    if (n.length > 0) {
-      setNode(n[0]);
+    if (nodeData.node) {
+      setNode(nodeData.node);
+      setEdges(nodeData.edges || []);
     }
-    setAllNodes(allNs);
-    // Filter edges connected to this node
-    const connected = allEdges.filter(
-      (e) =>
-        e.source_node_id === nodeId ||
-        e.target_node_id === nodeId ||
-        e.sourceNodeId === nodeId ||
-        e.targetNodeId === nodeId
-    );
-    setEdges(connected);
+    setAllNodes(allData.nodes || []);
     setLoading(false);
   };
 
@@ -83,7 +74,7 @@ export default function NodeDetail() {
 
   const handleAddEdge = async () => {
     if (!edgeForm.target_node_id) return;
-    await base44.entities.GraphEdge.create({
+    await synapse.createEdge({
       source_node_id: nodeId,
       target_node_id: edgeForm.target_node_id,
       relationship_type: edgeForm.relationship_type,
@@ -96,18 +87,14 @@ export default function NodeDetail() {
   };
 
   const handleDeleteEdge = async (edgeId) => {
-    await base44.entities.GraphEdge.delete(edgeId);
+    await synapse.deleteEdge(edgeId);
     loadData();
   };
 
   const handleDeleteNode = async () => {
     if (!confirm('Delete this node and all its edges?')) return;
     setDeleting(true);
-    // Delete connected edges first
-    for (const edge of edges) {
-      await base44.entities.GraphEdge.delete(edge.id);
-    }
-    await base44.entities.GraphNode.delete(nodeId);
+    await synapse.deleteNode(nodeId);
     navigate('/');
   };
 

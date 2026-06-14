@@ -96,7 +96,38 @@ Deno.serve(async (req) => {
       return Response.json({ success: true, edge, visitor }, { headers });
     }
 
-    return Response.json({ error: 'Unknown action. Use "create_node" or "create_edge"' }, { status: 400, headers });
+    if (body.action === 'delete_node') {
+      if (!body.node_id) return Response.json({ error: 'node_id is required' }, { status: 400, headers });
+      // Delete all connected edges first
+      const allEdges = await base44.asServiceRole.entities.GraphEdge.list();
+      const connected = allEdges.filter(e => e.source_node_id === body.node_id || e.target_node_id === body.node_id);
+      for (const edge of connected) {
+        await base44.asServiceRole.entities.GraphEdge.delete(edge.id);
+      }
+      await base44.asServiceRole.entities.GraphNode.delete(body.node_id);
+      return Response.json({ success: true, deleted_edges: connected.length }, { headers });
+    }
+
+    if (body.action === 'delete_edge') {
+      if (!body.edge_id) return Response.json({ error: 'edge_id is required' }, { status: 400, headers });
+      await base44.asServiceRole.entities.GraphEdge.delete(body.edge_id);
+      return Response.json({ success: true }, { headers });
+    }
+
+    if (body.action === 'update_node') {
+      if (!body.node_id) return Response.json({ error: 'node_id is required' }, { status: 400, headers });
+      const updateData = {};
+      if (body.name !== undefined) updateData.name = body.name;
+      if (body.type !== undefined) updateData.type = body.type;
+      if (body.content !== undefined) updateData.content = body.content;
+      if (body.importance !== undefined) updateData.importance = body.importance;
+      if (body.color !== undefined) updateData.color = body.color;
+      if (body.properties !== undefined) updateData.properties = typeof body.properties === 'string' ? body.properties : JSON.stringify(body.properties);
+      const node = await base44.asServiceRole.entities.GraphNode.update(body.node_id, updateData);
+      return Response.json({ success: true, node }, { headers });
+    }
+
+    return Response.json({ error: 'Unknown action. Use "create_node", "create_edge", "delete_node", "delete_edge", or "update_node"' }, { status: 400, headers });
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });
   }
