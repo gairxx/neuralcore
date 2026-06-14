@@ -126,13 +126,18 @@ export default function Home() {
   const [positions, setPositions] = useState({});
   const [svgSize, setSvgSize] = useState({ width: 800, height: 600 });
   const [hoveredNode, setHoveredNode] = useState(null);
+  const [stats, setStats] = useState(null);
   const containerRef = useRef(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
-    const data = await synapse.listAll();
+    const [data, statsData] = await Promise.all([
+      synapse.listAll(),
+      synapse.getStats(),
+    ]);
     setNodes(data.nodes || []);
     setEdges(data.edges || []);
+    setStats(statsData);
     setLoading(false);
   }, []);
 
@@ -214,7 +219,7 @@ export default function Home() {
         <div>
           <h2 className="text-lg font-semibold text-foreground font-heading">Graph Explorer</h2>
           <p className="text-xs text-muted-foreground font-mono">
-            {statsNodes} nodes · {statsEdges} edges · {orphanNodes.length} orphans
+            {statsNodes} nodes · {statsEdges} edges · {orphanNodes.length} orphans{stats ? ` · ${stats.visitors?.length || 0} visitors` : ''}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -369,24 +374,45 @@ export default function Home() {
         )}
       </div>
 
-      {/* Bottom bar: Top Nodes */}
-      <div className="px-6 py-3 border-t border-border flex-shrink-0 flex items-center gap-4 overflow-x-auto">
-        <span className="text-xs text-muted-foreground font-mono flex-shrink-0">Top Nodes:</span>
-        {topNodes.map((node) => (
-          <Link
-            key={node.id}
-            to={`/nodes/${node.id}`}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs border border-border hover:border-primary/40 transition-colors flex-shrink-0"
-          >
-            <span
-              className="w-2 h-2 rounded-full"
-              style={{ backgroundColor: node.color || TYPE_COLORS[node.type] }}
-            />
-            <span className="text-foreground font-mono">{node.name}</span>
-          </Link>
-        ))}
-        {topNodes.length === 0 && (
-          <span className="text-xs text-muted-foreground">No nodes yet</span>
+      {/* Bottom bar: Top Nodes + Referrers */}
+      <div className="border-t border-border flex-shrink-0 flex flex-col">
+        <div className="px-6 py-2.5 flex items-center gap-4 overflow-x-auto border-b border-border/50">
+          <span className="text-xs text-muted-foreground font-mono flex-shrink-0">Top Nodes:</span>
+          {topNodes.map((node) => (
+            <Link
+              key={node.id}
+              to={`/nodes/${node.id}`}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs border border-border hover:border-primary/40 transition-colors flex-shrink-0"
+            >
+              <span
+                className="w-2 h-2 rounded-full"
+                style={{ backgroundColor: node.color || TYPE_COLORS[node.type] }}
+              />
+              <span className="text-foreground font-mono">{node.name}</span>
+            </Link>
+          ))}
+          {topNodes.length === 0 && (
+            <span className="text-xs text-muted-foreground">No nodes yet</span>
+          )}
+        </div>
+        {stats && stats.visitors && stats.visitors.length > 0 && (
+          <div className="px-6 py-2 flex items-center gap-3 overflow-x-auto">
+            <span className="text-xs text-muted-foreground font-mono flex-shrink-0">Traffic:</span>
+            {stats.visitors
+              .filter(v => v.referrer)
+              .slice(0, 10)
+              .map((v, i) => (
+                <span key={i} className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs border border-emerald-500/20 bg-emerald-500/5 flex-shrink-0">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                  <span className="text-emerald-300 font-mono max-w-[200px] truncate" title={v.referrer}>
+                    {(() => { try { return new URL(v.referrer).hostname; } catch { return v.referrer || 'direct'; } })()}
+                  </span>
+                </span>
+              ))}
+            {stats.visitors.filter(v => v.referrer).length === 0 && (
+              <span className="text-xs text-muted-foreground font-mono">No referrer data yet</span>
+            )}
+          </div>
         )}
       </div>
     </div>

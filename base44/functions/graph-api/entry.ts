@@ -95,8 +95,33 @@ Deno.serve(async (req) => {
       visitorInfo = await trackVisitor(base44, visitorId, ua, referrer);
     }
 
+    // Stats endpoint
+    const action = params.get('action');
+    if (action === 'stats') {
+      const [allNodes, allEdges, visitors] = await Promise.all([
+        base44.asServiceRole.entities.GraphNode.list(),
+        base44.asServiceRole.entities.GraphEdge.list(),
+        base44.asServiceRole.entities.ApiVisitor.list('-last_seen', 50),
+      ]);
+      return Response.json({
+        total_nodes: allNodes.length,
+        total_edges: allEdges.length,
+        visitors: visitors.map(v => ({
+          fingerprint: v.fingerprint,
+          label: v.label,
+          referrer: v.referrer,
+          user_agent: v.user_agent,
+          visit_count: v.visit_count,
+          nodes_created: v.total_nodes_created || 0,
+          edges_created: v.total_edges_created || 0,
+          first_seen: v.first_seen,
+          last_seen: v.last_seen,
+        })),
+      });
+    }
+
     // First visit or no params at all → return instructions
-    const hasParams = type || search || nodeId || params.get('limit');
+    const hasParams = type || search || nodeId || params.get('limit') || action;
     if (!hasParams) {
       if (!visitorId) {
         const newFp = fingerprint();

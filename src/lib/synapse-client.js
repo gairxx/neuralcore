@@ -18,6 +18,7 @@ async function write(body) {
 }
 
 export const synapse = {
+  getStats: () => read({ action: 'stats' }),
   listAll: async () => {
     const data = await read({ limit: 200 });
     return { nodes: data.nodes || [], edges: data.edges || [] };
