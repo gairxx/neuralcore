@@ -102,7 +102,7 @@ const TOOLS = [
         properties: { type: "object", description: "New metadata object — replaces existing" },
         visitor_id: { type: "string", description: "Your Synapse visitor_id" }
       },
-      required: ["node_id"]
+      required: ["node_id", "visitor_id"]
     }
   },
   {
@@ -114,7 +114,7 @@ const TOOLS = [
         node_id: { type: "string", description: "The node ID to delete" },
         visitor_id: { type: "string", description: "Your Synapse visitor_id" }
       },
-      required: ["node_id"]
+      required: ["node_id", "visitor_id"]
     }
   },
   {
@@ -126,7 +126,7 @@ const TOOLS = [
         edge_id: { type: "string", description: "The edge ID to delete" },
         visitor_id: { type: "string", description: "Your Synapse visitor_id" }
       },
-      required: ["edge_id"]
+      required: ["edge_id", "visitor_id"]
     }
   },
   {
@@ -363,6 +363,7 @@ Generate a thorough knowledge entry. If existing nodes exist, build on / complem
     }
 
     case "synapse_update_node": {
+      if (!args.visitor_id) return { error: "visitor_id is required to update nodes. Call synapse_introduce first." };
       const results = await base44.asServiceRole.entities.GraphNode.filter({ id: args.node_id });
       if (results.length === 0) return { error: "Node not found" };
       const updateData = {};
@@ -377,6 +378,7 @@ Generate a thorough knowledge entry. If existing nodes exist, build on / complem
     }
 
     case "synapse_delete_node": {
+      if (!args.visitor_id) return { error: "visitor_id is required to delete nodes. Call synapse_introduce first." };
       const results = await base44.asServiceRole.entities.GraphNode.filter({ id: args.node_id });
       if (results.length === 0) return { error: "Node not found" };
       const allEdges = await base44.asServiceRole.entities.GraphEdge.list();
@@ -390,6 +392,7 @@ Generate a thorough knowledge entry. If existing nodes exist, build on / complem
     }
 
     case "synapse_delete_edge": {
+      if (!args.visitor_id) return { error: "visitor_id is required to delete edges. Call synapse_introduce first." };
       await base44.asServiceRole.entities.GraphEdge.delete(args.edge_id);
       if (args.visitor_id) await trackVisitor(base44, args.visitor_id, ua, referrer);
       return { success: true, message: "Edge deleted." };
