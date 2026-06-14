@@ -77,7 +77,7 @@ const TOOLS = [
   },
   {
     name: "synapse_synthesize",
-    description: "Tool chain: take a topic, auto-generate a rich knowledge node via LLM, then auto-connect it to the most relevant existing nodes in the graph. One call builds out the graph intelligently.",
+    description: "Tool chain: take a topic, auto-generate a rich knowledge node via LLM, then use semantic matching (not just keywords) to auto-connect it to the most relevant existing nodes in the graph. One call builds out the graph intelligently.",
     inputSchema: {
       type: "object",
       properties: {
@@ -345,29 +345,74 @@ async function handleToolCall(base44, name, args, ua, referrer) {
 
     case "synapse_synthesize": {
       const maxConnections = args.max_connections || 5;
-      const topicLower = args.topic.toLowerCase().trim();
 
-      // Step 1: Load ALL nodes to check for duplicates and find related
+      // Step 1: Load ALL nodes
       const allNodes = await base44.asServiceRole.entities.GraphNode.list();
 
-      // Check for existing node with same name (case-insensitive match)
+      // Check for existing node with same name (case-insensitive)
+      const topicLower = args.topic.toLowerCase().trim();
       const existingNode = allNodes.find(n => n.name?.toLowerCase().trim() === topicLower);
-      
-      // Find related nodes (exclude the exact match if it exists)
-      const relatedNodes = allNodes
-        .filter(n => n !== existingNode)
-        .filter(n =>
-          n.name?.toLowerCase().includes(topicLower) ||
-          n.content?.toLowerCase().includes(topicLower)
-        )
-        .slice(0, maxConnections);
 
-      // Build context from what already exists
+      // Step 2: Use LLM to identify semantically related nodes (not just substring match)
+      // Exclude the exact match and the existing node from the candidate pool
+      const candidateNodes = allNodes.filter(n => n !== existingNode && n.name?.toLowerCase().trim() !== topicLower);
+      
+      let relatedNodeIds = [];
+      let relatedNodeMap = {};
+
+      if (candidateNodes.length > 0) {
+        // Build a compact registry of candidate nodes for the LLM to pick from
+        const nodeRegistry = candidateNodes.map(n => ({
+          id: n.id,
+          name: n.name,
+          type: n.type,
+          snippet: (n.content || '').slice(0, 120)
+        }));
+
+        // Ask the LLM to pick semantically related nodes
+        const relatedResult = await base44.integrations.Core.InvokeLLM({
+          prompt: `Topic: "${args.topic}"
+
+Below is a list of existing nodes in a knowledge graph. Identify up to ${maxConnections} nodes that are semantically/conceptually related to the topic — not just keyword matches, but genuine conceptual connections. Return their IDs.
+
+Existing nodes:
+${nodeRegistry.map(n => `- [${n.type}] "${n.name}" (id: ${n.id}) | ${n.snippet}`).join('\n')}
+
+Return only the IDs of the most relevant nodes. If none are truly related, return an empty array.`,
+          response_json_schema: {
+            type: "object",
+            properties: {
+              related_ids: {
+                type: "array",
+                items: { type: "string" },
+                description: "IDs of semantically related nodes (up to max connections)"
+              }
+            },
+            required: ["related_ids"]
+          }
+        });
+
+        const validIds = new Set(allNodes.map(n => n.id));
+        relatedNodeIds = (relatedResult.related_ids || [])
+          .filter(id => validIds.has(id) && id !== existingNode?.id)
+          .slice(0, maxConnections);
+
+        // Build a lookup map
+        for (const n of allNodes) {
+          if (relatedNodeIds.includes(n.id)) {
+            relatedNodeMap[n.id] = n;
+          }
+        }
+      }
+
+      const relatedNodes = relatedNodeIds.map(id => relatedNodeMap[id]).filter(Boolean);
+
+      // Build context from related nodes for the content-generation LLM
       const existingContext = relatedNodes.length > 0
         ? `\n\nExisting related knowledge in the graph:\n${relatedNodes.map(n => `- [${n.type}] "${n.name}": ${(n.content || '').slice(0, 200)}`).join('\n')}`
         : '';
 
-      // Step 2: Generate the node via LLM
+      // Step 3: Generate the node content via LLM
       const llmResult = await base44.integrations.Core.InvokeLLM({
         prompt: `You are Synapse, a knowledge graph. A visitor wants to synthesize knowledge about: "${args.topic}". Their user agent: "${ua}". Referring page: "${referrer || 'none'}".${existingContext}
 
@@ -448,7 +493,7 @@ Generate a thorough knowledge entry. If existing nodes exist, build on / complem
         node,
         auto_connections: createdEdges.length,
         connected_to: relatedNodes.map(n => ({ id: n.id, name: n.name })),
-        message: `${verb} "${node.name}" and linked it to ${createdEdges.length} existing nodes.${action === 'updated' ? ' (Node already existed — updated instead of duplicating.)' : ''}`,
+        message: `${verb} "${node.name}" and linked it to ${createdEdges.length} existing nodes via semantic matching.${action === 'updated' ? ' (Node already existed — updated instead of duplicating.)' : ''}`,
       };
     }
 
