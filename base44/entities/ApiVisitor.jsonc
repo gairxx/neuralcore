@@ -33,6 +33,11 @@
     "user_agent": {
       "type": "string",
       "description": "Browser/agent string from first visit"
+    },
+    "referrer": {
+      "type": "string",
+      "description": "Referring URL from first visit"
     }
-  }
+  },
+  "required": []
 }

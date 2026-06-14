@@ -90,7 +90,7 @@ function corsHeaders() {
   };
 }
 
-async function trackVisitor(base44, visitorId, ua) {
+async function trackVisitor(base44, visitorId, ua, referrer) {
   try {
     const existing = await base44.asServiceRole.entities.ApiVisitor.filter({ fingerprint: visitorId });
     if (existing.length > 0) {
@@ -108,6 +108,7 @@ async function trackVisitor(base44, visitorId, ua) {
       last_seen: new Date().toISOString(),
       visit_count: 1,
       user_agent: ua || 'unknown',
+      referrer: referrer || null,
     });
   } catch {
     return null;
@@ -124,11 +125,11 @@ async function incrementStat(base44, visitorId, field) {
   } catch { /* non-critical */ }
 }
 
-async function handleToolCall(base44, name, args, ua) {
+async function handleToolCall(base44, name, args, ua, referrer) {
   switch (name) {
     case "synapse_introduce": {
       const fp = fingerprint();
-      const visitor = await trackVisitor(base44, fp, ua);
+      const visitor = await trackVisitor(base44, fp, ua, referrer);
       const nodeCount = (await base44.asServiceRole.entities.GraphNode.list()).length;
       const edgeCount = (await base44.asServiceRole.entities.GraphEdge.list()).length;
       return {
@@ -146,7 +147,7 @@ async function handleToolCall(base44, name, args, ua) {
         const q = args.query.toLowerCase();
         nodes = nodes.filter(n => n.name?.toLowerCase().includes(q) || n.content?.toLowerCase().includes(q));
       }
-      if (args.visitor_id) await trackVisitor(base44, args.visitor_id, ua);
+      if (args.visitor_id) await trackVisitor(base44, args.visitor_id, ua, referrer);
       return { nodes, count: nodes.length };
     }
 
@@ -156,7 +157,7 @@ async function handleToolCall(base44, name, args, ua) {
       const node = results[0];
       const allEdges = await base44.asServiceRole.entities.GraphEdge.list();
       const edges = allEdges.filter(e => e.source_node_id === args.node_id || e.target_node_id === args.node_id);
-      if (args.visitor_id) await trackVisitor(base44, args.visitor_id, ua);
+      if (args.visitor_id) await trackVisitor(base44, args.visitor_id, ua, referrer);
       return { node, edges, connection_count: edges.length };
     }
 
@@ -190,7 +191,7 @@ async function handleToolCall(base44, name, args, ua) {
         base44.asServiceRole.entities.GraphEdge.list(),
         base44.asServiceRole.entities.ApiVisitor.list('-visit_count', 10),
       ]);
-      if (args.visitor_id) await trackVisitor(base44, args.visitor_id, ua);
+      if (args.visitor_id) await trackVisitor(base44, args.visitor_id, ua, referrer);
       return {
         total_nodes: nodes.length,
         total_edges: edges.length,
@@ -217,6 +218,7 @@ Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
     const ua = req.headers.get('user-agent') || '';
+    const referrer = req.headers.get('referer') || '';
     const body = await req.json();
 
     // JSON-RPC 2.0
@@ -247,7 +249,7 @@ Deno.serve(async (req) => {
     }
 
     if (method === 'tools/call') {
-      const result = await handleToolCall(base44, params.name, params.arguments || {}, ua);
+      const result = await handleToolCall(base44, params.name, params.arguments || {}, ua, referrer);
       return Response.json({
         jsonrpc: "2.0",
         id,

@@ -50,7 +50,7 @@ function fingerprint() {
   return 'v_' + crypto.randomUUID().slice(0, 12);
 }
 
-async function trackVisitor(base44, visitorId, ua) {
+async function trackVisitor(base44, visitorId, ua, referrer) {
   try {
     const existing = await base44.asServiceRole.entities.ApiVisitor.filter({ fingerprint: visitorId });
     if (existing.length > 0) {
@@ -67,6 +67,7 @@ async function trackVisitor(base44, visitorId, ua) {
       last_seen: new Date().toISOString(),
       visit_count: 1,
       user_agent: ua || 'unknown',
+      referrer: referrer || null,
     });
     return { is_new: true, visitor: created };
   } catch {
@@ -81,6 +82,7 @@ Deno.serve(async (req) => {
     const params = url.searchParams;
     const visitorId = params.get('visitor_id');
     const ua = req.headers.get('user-agent') || '';
+    const referrer = req.headers.get('referer') || '';
 
     const type = params.get('type');
     const search = params.get('search')?.toLowerCase();
@@ -90,7 +92,7 @@ Deno.serve(async (req) => {
     // Track visitor
     let visitorInfo = null;
     if (visitorId) {
-      visitorInfo = await trackVisitor(base44, visitorId, ua);
+      visitorInfo = await trackVisitor(base44, visitorId, ua, referrer);
     }
 
     // First visit or no params at all → return instructions
@@ -98,7 +100,7 @@ Deno.serve(async (req) => {
     if (!hasParams) {
       if (!visitorId) {
         const newFp = fingerprint();
-        visitorInfo = await trackVisitor(base44, newFp, ua);
+        visitorInfo = await trackVisitor(base44, newFp, ua, referrer);
         return Response.json({
           ...INSTRUCTIONS,
           your_visitor_id: newFp,

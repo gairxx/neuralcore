@@ -1,6 +1,6 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.32';
 
-async function trackVisitor(base44, visitorId, ua) {
+async function trackVisitor(base44, visitorId, ua, referrer) {
   try {
     const existing = await base44.asServiceRole.entities.ApiVisitor.filter({ fingerprint: visitorId });
     if (existing.length > 0) {
@@ -17,6 +17,7 @@ async function trackVisitor(base44, visitorId, ua) {
       last_seen: new Date().toISOString(),
       visit_count: 1,
       user_agent: ua || 'unknown',
+      referrer: referrer || null,
     });
   } catch {
     return null;
@@ -38,6 +39,7 @@ Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
     const ua = req.headers.get('user-agent') || '';
+    const referrer = req.headers.get('referer') || '';
 
     if (req.method === 'OPTIONS') {
       return new Response(null, {
@@ -60,7 +62,7 @@ Deno.serve(async (req) => {
     // Track visitor
     let visitor = null;
     if (visitorId) {
-      visitor = await trackVisitor(base44, visitorId, ua);
+      visitor = await trackVisitor(base44, visitorId, ua, referrer);
     }
 
     if (body.action === 'create_node') {
