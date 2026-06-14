@@ -1,0 +1,38 @@
+{
+  "name": "ApiVisitor",
+  "type": "object",
+  "properties": {
+    "fingerprint": {
+      "type": "string",
+      "description": "Unique visitor ID assigned by the API"
+    },
+    "label": {
+      "type": "string",
+      "description": "Human-friendly name if the visitor provides one"
+    },
+    "first_seen": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "last_seen": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "visit_count": {
+      "type": "integer",
+      "default": 1
+    },
+    "total_nodes_created": {
+      "type": "integer",
+      "default": 0
+    },
+    "total_edges_created": {
+      "type": "integer",
+      "default": 0
+    },
+    "user_agent": {
+      "type": "string",
+      "description": "Browser/agent string from first visit"
+    }
+  }
+}
