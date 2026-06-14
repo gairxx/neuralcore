@@ -87,6 +87,73 @@ const TOOLS = [
       },
       required: ["topic"]
     }
+  },
+  {
+    name: "synapse_update_node",
+    description: "Update an existing node's name, type, content, importance, or properties. Only provide fields you want to change.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        node_id: { type: "string", description: "The node ID to update" },
+        name: { type: "string", description: "New short label" },
+        type: { type: "string", description: "New type: concept, fact, insight, quote, question, person, event, tool, custom" },
+        content: { type: "string", description: "New content — replaces existing content entirely" },
+        importance: { type: "integer", description: "New importance 1-10" },
+        properties: { type: "object", description: "New metadata object — replaces existing" },
+        visitor_id: { type: "string", description: "Your Synapse visitor_id" }
+      },
+      required: ["node_id"]
+    }
+  },
+  {
+    name: "synapse_delete_node",
+    description: "Delete a node and all its connected edges from the graph. Irreversible — use with care.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        node_id: { type: "string", description: "The node ID to delete" },
+        visitor_id: { type: "string", description: "Your Synapse visitor_id" }
+      },
+      required: ["node_id"]
+    }
+  },
+  {
+    name: "synapse_delete_edge",
+    description: "Delete a single edge/connection between two nodes.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        edge_id: { type: "string", description: "The edge ID to delete" },
+        visitor_id: { type: "string", description: "Your Synapse visitor_id" }
+      },
+      required: ["edge_id"]
+    }
+  },
+  {
+    name: "synapse_list_nodes",
+    description: "List all nodes in the graph, optionally filtered by type. Returns full node data sorted by recency.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        type: { type: "string", description: "Optional filter: concept, fact, insight, quote, question, person, event, tool, custom" },
+        limit: { type: "integer", description: "Max results (default: 50, max: 200)" },
+        visitor_id: { type: "string", description: "Your Synapse visitor_id" }
+      },
+      required: []
+    }
+  },
+  {
+    name: "synapse_list_edges",
+    description: "List edges in the graph: all edges, edges from a node, or edges to a node.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        node_id: { type: "string", description: "Optional: get only edges connected to this node" },
+        limit: { type: "integer", description: "Max results (default: 100)" },
+        visitor_id: { type: "string", description: "Your Synapse visitor_id" }
+      },
+      required: []
+    }
   }
 ];
 
@@ -293,6 +360,57 @@ Generate a thorough knowledge entry. If existing nodes exist, build on / complem
         connected_to: relatedNodes.map(n => ({ id: n.id, name: n.name })),
         message: `Synthesized "${node.name}" and linked it to ${createdEdges.length} existing nodes.`,
       };
+    }
+
+    case "synapse_update_node": {
+      const results = await base44.asServiceRole.entities.GraphNode.filter({ id: args.node_id });
+      if (results.length === 0) return { error: "Node not found" };
+      const updateData = {};
+      if (args.name !== undefined) updateData.name = args.name;
+      if (args.type !== undefined) updateData.type = args.type;
+      if (args.content !== undefined) updateData.content = args.content;
+      if (args.importance !== undefined) updateData.importance = args.importance;
+      if (args.properties !== undefined) updateData.properties = typeof args.properties === 'string' ? args.properties : JSON.stringify(args.properties);
+      const node = await base44.asServiceRole.entities.GraphNode.update(args.node_id, updateData);
+      if (args.visitor_id) await trackVisitor(base44, args.visitor_id, ua, referrer);
+      return { success: true, node, message: `Node "${node.name}" updated.` };
+    }
+
+    case "synapse_delete_node": {
+      const results = await base44.asServiceRole.entities.GraphNode.filter({ id: args.node_id });
+      if (results.length === 0) return { error: "Node not found" };
+      const allEdges = await base44.asServiceRole.entities.GraphEdge.list();
+      const connected = allEdges.filter(e => e.source_node_id === args.node_id || e.target_node_id === args.node_id);
+      for (const edge of connected) {
+        await base44.asServiceRole.entities.GraphEdge.delete(edge.id);
+      }
+      await base44.asServiceRole.entities.GraphNode.delete(args.node_id);
+      if (args.visitor_id) await trackVisitor(base44, args.visitor_id, ua, referrer);
+      return { success: true, deleted_node: results[0].name, deleted_edges: connected.length, message: `Deleted "${results[0].name}" and ${connected.length} connected edges.` };
+    }
+
+    case "synapse_delete_edge": {
+      await base44.asServiceRole.entities.GraphEdge.delete(args.edge_id);
+      if (args.visitor_id) await trackVisitor(base44, args.visitor_id, ua, referrer);
+      return { success: true, message: "Edge deleted." };
+    }
+
+    case "synapse_list_nodes": {
+      const limit = Math.min(args.limit || 50, 200);
+      let nodes = await base44.asServiceRole.entities.GraphNode.list('-created_date', limit);
+      if (args.type) nodes = nodes.filter(n => n.type === args.type);
+      if (args.visitor_id) await trackVisitor(base44, args.visitor_id, ua, referrer);
+      return { nodes, count: nodes.length, total_in_graph: (await base44.asServiceRole.entities.GraphNode.list()).length };
+    }
+
+    case "synapse_list_edges": {
+      const limit = Math.min(args.limit || 100, 200);
+      let edges = await base44.asServiceRole.entities.GraphEdge.list('-created_date', limit);
+      if (args.node_id) {
+        edges = edges.filter(e => e.source_node_id === args.node_id || e.target_node_id === args.node_id);
+      }
+      if (args.visitor_id) await trackVisitor(base44, args.visitor_id, ua, referrer);
+      return { edges, count: edges.length };
     }
 
     default:
