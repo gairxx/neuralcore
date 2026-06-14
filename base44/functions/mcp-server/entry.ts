@@ -74,6 +74,19 @@ const TOOLS = [
       },
       required: []
     }
+  },
+  {
+    name: "synapse_synthesize",
+    description: "Tool chain: take a topic, auto-generate a rich knowledge node via LLM, then auto-connect it to the most relevant existing nodes in the graph. One call builds out the graph intelligently.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        topic: { type: "string", description: "The topic/concept to research and synthesize into the graph" },
+        visitor_id: { type: "string", description: "Your Synapse visitor_id" },
+        max_connections: { type: "integer", description: "Max number of edges to auto-create to related nodes (default: 5)" }
+      },
+      required: ["topic"]
+    }
   }
 ];
 
@@ -205,6 +218,80 @@ async function handleToolCall(base44, name, args, ua, referrer) {
           first_seen: v.first_seen,
           last_seen: v.last_seen,
         })),
+      };
+    }
+
+    case "synapse_synthesize": {
+      const maxConnections = args.max_connections || 5;
+
+      // Step 1: Find potentially related existing nodes
+      const allNodes = await base44.asServiceRole.entities.GraphNode.list('-importance', 50);
+      const topicLower = args.topic.toLowerCase();
+      const relatedNodes = allNodes.filter(n =>
+        n.name?.toLowerCase().includes(topicLower) ||
+        n.content?.toLowerCase().includes(topicLower)
+      ).slice(0, maxConnections);
+
+      // Build context from what already exists
+      const existingContext = relatedNodes.length > 0
+        ? `\n\nExisting related knowledge in the graph:\n${relatedNodes.map(n => `- [${n.type}] "${n.name}": ${(n.content || '').slice(0, 200)}`).join('\n')}`
+        : '';
+
+      // Step 2: Generate the node via LLM
+      const llmResult = await base44.integrations.Core.InvokeLLM({
+        prompt: `You are Synapse, a knowledge graph. A visitor wants to synthesize knowledge about: "${args.topic}". Their user agent: "${ua}". Referring page: "${referrer || 'none'}".${existingContext}
+
+Generate a thorough knowledge entry. If existing nodes exist, build on / complement them — don't just repeat. Return JSON:
+- name: a concise, precise label (max 80 chars)
+- type: most fitting — concept, fact, insight, quote, question, person, event, tool, custom
+- content: detailed knowledge — several paragraphs. Include key facts, historical context, significance, and implications.
+- importance: 1-10 rating`,
+        response_json_schema: {
+          type: "object",
+          properties: {
+            name: { type: "string" },
+            type: { type: "string", enum: ["concept", "fact", "insight", "quote", "question", "person", "event", "tool", "custom"] },
+            content: { type: "string" },
+            importance: { type: "integer", minimum: 1, maximum: 10 }
+          },
+          required: ["name", "type", "content", "importance"]
+        }
+      });
+
+      // Step 3: Create the node
+      const nodeData = {
+        name: llmResult.name,
+        type: llmResult.type,
+        content: llmResult.content,
+        importance: llmResult.importance,
+        properties: JSON.stringify({ synthesized_from_topic: args.topic, user_agent: ua, referrer: referrer || null }),
+      };
+      if (referrer) nodeData.referrer = referrer;
+      const node = await base44.asServiceRole.entities.GraphNode.create(nodeData);
+      if (args.visitor_id) await incrementStat(base44, args.visitor_id, 'total_nodes_created');
+
+      // Step 4: Auto-connect to related existing nodes
+      const createdEdges = [];
+      for (const related of relatedNodes) {
+        const edge = await base44.asServiceRole.entities.GraphEdge.create({
+          source_node_id: node.id,
+          target_node_id: related.id,
+          relationship_type: 'relates_to',
+          strength: 7,
+          description: `Auto-linked via synthesize: "${args.topic}" relates to "${related.name}"`,
+        });
+        createdEdges.push(edge);
+      }
+      if (args.visitor_id && createdEdges.length > 0) {
+        await incrementStat(base44, args.visitor_id, 'total_edges_created');
+      }
+
+      return {
+        success: true,
+        node,
+        auto_connections: createdEdges.length,
+        connected_to: relatedNodes.map(n => ({ id: n.id, name: n.name })),
+        message: `Synthesized "${node.name}" and linked it to ${createdEdges.length} existing nodes.`,
       };
     }
 
