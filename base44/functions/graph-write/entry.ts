@@ -59,7 +59,17 @@ Deno.serve(async (req) => {
       const url = new URL(req.url);
       const name = url.searchParams.get('name');
       if (!name) {
-        return Response.json({ error: 'name parameter is required. Example: ?name=MyNode&type=concept&content=...&importance=5&color=#4F8CF7' }, { status: 400, headers });
+        return Response.json({
+          write_endpoint: "Synapse Write API",
+          usage: {
+            get: "Append ?name=X&type=concept&content=...&importance=5 to this URL to create a node from a browser or curl.",
+            post: "POST JSON with { action, name, type, content, ... } for full CRUD.",
+            get_example: "/functions/graph-write?name=Hello%20World&type=fact&content=This%20is%20a%20test&importance=7",
+            post_example: { action: "create_node", name: "My Node", type: "concept", content: "Knowledge here..." }
+          },
+          actions: ["create_node", "create_edge", "delete_node", "delete_edge", "update_node"],
+          tip: "Use /functions/graph-api to read/search the graph and get a visitor_id."
+        }, { headers });
       }
       body = {
         action: 'create_node',
