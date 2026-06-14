@@ -45,18 +45,38 @@ Deno.serve(async (req) => {
       return new Response(null, {
         headers: {
           'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'POST, OPTIONS',
+          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
           'Access-Control-Allow-Headers': 'Content-Type',
         },
       });
     }
 
-    if (req.method !== 'POST') {
-      return Response.json({ error: 'Use POST', instructions_url: '/functions/graph-api' }, { status: 405 });
+    const headers = { 'Access-Control-Allow-Origin': '*' };
+
+    // GET requests: read params from URL query string → auto-create node
+    let body;
+    if (req.method === 'GET') {
+      const url = new URL(req.url);
+      const name = url.searchParams.get('name');
+      if (!name) {
+        return Response.json({ error: 'name parameter is required. Example: ?name=MyNode&type=concept&content=...&importance=5&color=#4F8CF7' }, { status: 400, headers });
+      }
+      body = {
+        action: 'create_node',
+        name: name,
+        type: url.searchParams.get('type') || undefined,
+        content: url.searchParams.get('content') || undefined,
+        importance: url.searchParams.get('importance') ? parseInt(url.searchParams.get('importance')) : undefined,
+        color: url.searchParams.get('color') || undefined,
+        properties: url.searchParams.get('properties') || undefined,
+        visitor_id: url.searchParams.get('visitor_id') || undefined,
+      };
+    } else if (req.method === 'POST') {
+      body = await req.json();
+    } else {
+      return Response.json({ error: 'Use GET or POST', instructions_url: '/functions/graph-api' }, { status: 405 });
     }
 
-    const body = await req.json();
-    const headers = { 'Access-Control-Allow-Origin': '*' };
     const visitorId = body.visitor_id;
 
     // Track visitor
