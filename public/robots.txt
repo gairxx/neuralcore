@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+Allow: /functions/
+Disallow: /src/
