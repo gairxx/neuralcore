@@ -78,8 +78,14 @@ Deno.serve(async (req) => {
       }
 
       if (topic) {
+        const topicLower = topic.toLowerCase().trim();
+
+        // Check if a node for this topic already exists
+        const allNodes = await base44.asServiceRole.entities.GraphNode.list();
+        const existingNode = allNodes.find(n => n.name?.toLowerCase().trim() === topicLower);
+
         const llmResult = await base44.integrations.Core.InvokeLLM({
-          prompt: `You are Synapse, a knowledge graph. A visitor wants to learn about: "${topic}". Their user agent: "${ua}". Referring page: "${referrer || 'none'}".
+          prompt: `You are Synapse, a knowledge graph. A visitor wants to learn about: "${topic}". Their user agent: "${ua}". Referring page: "${referrer || 'none'}".${existingNode ? `\n\nA node for "${topic}" already exists. Generate an updated, enriched version.` : ''}
 
 Generate a thorough, insightful knowledge entry. Return JSON with:
 - name: a concise, precise label (max 80 chars)
@@ -98,15 +104,28 @@ Generate a thorough, insightful knowledge entry. Return JSON with:
           }
         });
 
-        body = {
-          action: 'create_node',
-          name: llmResult.name,
-          type: llmResult.type,
-          content: llmResult.content,
-          importance: llmResult.importance,
-          properties: JSON.stringify({ generated_from_topic: topic, user_agent: ua, referrer: referrer || null }),
-          visitor_id: url.searchParams.get('visitor_id') || undefined,
-        };
+        if (existingNode) {
+          body = {
+            action: 'update_node',
+            node_id: existingNode.id,
+            name: llmResult.name,
+            type: llmResult.type,
+            content: llmResult.content,
+            importance: llmResult.importance,
+            properties: JSON.stringify({ generated_from_topic: topic, updated_via_topic: true, user_agent: ua, referrer: referrer || null }),
+            visitor_id: url.searchParams.get('visitor_id') || undefined,
+          };
+        } else {
+          body = {
+            action: 'create_node',
+            name: llmResult.name,
+            type: llmResult.type,
+            content: llmResult.content,
+            importance: llmResult.importance,
+            properties: JSON.stringify({ generated_from_topic: topic, user_agent: ua, referrer: referrer || null }),
+            visitor_id: url.searchParams.get('visitor_id') || undefined,
+          };
+        }
       } else {
         body = {
           action: 'create_node',

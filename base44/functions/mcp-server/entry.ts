@@ -345,14 +345,22 @@ async function handleToolCall(base44, name, args, ua, referrer) {
 
     case "synapse_synthesize": {
       const maxConnections = args.max_connections || 5;
+      const topicLower = args.topic.toLowerCase().trim();
 
-      // Step 1: Find potentially related existing nodes
-      const allNodes = await base44.asServiceRole.entities.GraphNode.list('-importance', 50);
-      const topicLower = args.topic.toLowerCase();
-      const relatedNodes = allNodes.filter(n =>
-        n.name?.toLowerCase().includes(topicLower) ||
-        n.content?.toLowerCase().includes(topicLower)
-      ).slice(0, maxConnections);
+      // Step 1: Load ALL nodes to check for duplicates and find related
+      const allNodes = await base44.asServiceRole.entities.GraphNode.list();
+
+      // Check for existing node with same name (case-insensitive match)
+      const existingNode = allNodes.find(n => n.name?.toLowerCase().trim() === topicLower);
+      
+      // Find related nodes (exclude the exact match if it exists)
+      const relatedNodes = allNodes
+        .filter(n => n !== existingNode)
+        .filter(n =>
+          n.name?.toLowerCase().includes(topicLower) ||
+          n.content?.toLowerCase().includes(topicLower)
+        )
+        .slice(0, maxConnections);
 
       // Build context from what already exists
       const existingContext = relatedNodes.length > 0
@@ -380,21 +388,45 @@ Generate a thorough knowledge entry. If existing nodes exist, build on / complem
         }
       });
 
-      // Step 3: Create the node
-      const nodeData = {
-        name: llmResult.name,
-        type: llmResult.type,
-        content: llmResult.content,
-        importance: llmResult.importance,
-        properties: JSON.stringify({ synthesized_from_topic: args.topic, user_agent: ua, referrer: referrer || null }),
-      };
-      if (referrer) nodeData.referrer = referrer;
-      const node = await base44.asServiceRole.entities.GraphNode.create(nodeData);
-      if (args.visitor_id) await incrementStat(base44, args.visitor_id, 'total_nodes_created');
+      let node;
+      let action;
 
-      // Step 4: Auto-connect to related existing nodes
+      if (existingNode) {
+        // Update existing node instead of creating a duplicate
+        const updateData = {
+          type: llmResult.type,
+          content: llmResult.content,
+          importance: llmResult.importance,
+          properties: JSON.stringify({ synthesized_from_topic: args.topic, updated_via_synthesize: true, user_agent: ua, referrer: referrer || null }),
+        };
+        node = await base44.asServiceRole.entities.GraphNode.update(existingNode.id, updateData);
+        action = 'updated';
+      } else {
+        // Create new node
+        const nodeData = {
+          name: llmResult.name,
+          type: llmResult.type,
+          content: llmResult.content,
+          importance: llmResult.importance,
+          properties: JSON.stringify({ synthesized_from_topic: args.topic, user_agent: ua, referrer: referrer || null }),
+        };
+        if (referrer) nodeData.referrer = referrer;
+        node = await base44.asServiceRole.entities.GraphNode.create(nodeData);
+        if (args.visitor_id) await incrementStat(base44, args.visitor_id, 'total_nodes_created');
+        action = 'created';
+      }
+
+      // Step 4: Auto-connect to related nodes (skip edges that already exist)
+      const allEdges = await base44.asServiceRole.entities.GraphEdge.list();
+      const existingEdgePairs = new Set(
+        allEdges
+          .filter(e => e.source_node_id === node.id)
+          .map(e => e.target_node_id)
+      );
+
       const createdEdges = [];
       for (const related of relatedNodes) {
+        if (existingEdgePairs.has(related.id)) continue; // Skip existing connections
         const edge = await base44.asServiceRole.entities.GraphEdge.create({
           source_node_id: node.id,
           target_node_id: related.id,
@@ -403,17 +435,20 @@ Generate a thorough knowledge entry. If existing nodes exist, build on / complem
           description: `Auto-linked via synthesize: "${args.topic}" relates to "${related.name}"`,
         });
         createdEdges.push(edge);
+        existingEdgePairs.add(related.id);
       }
       if (args.visitor_id && createdEdges.length > 0) {
         await incrementStat(base44, args.visitor_id, 'total_edges_created');
       }
 
+      const verb = action === 'created' ? 'created' : 'updated';
       return {
         success: true,
+        action,
         node,
         auto_connections: createdEdges.length,
         connected_to: relatedNodes.map(n => ({ id: n.id, name: n.name })),
-        message: `Synthesized "${node.name}" and linked it to ${createdEdges.length} existing nodes.`,
+        message: `${verb} "${node.name}" and linked it to ${createdEdges.length} existing nodes.${action === 'updated' ? ' (Node already existed — updated instead of duplicating.)' : ''}`,
       };
     }
 
