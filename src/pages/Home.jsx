@@ -47,7 +47,7 @@ function simpleForceLayout(nodes, edges, width, height) {
   const iterations = 80;
   const repulsionStrength = 5000;
   const attractionStrength = 0.005;
-  const damping = 0.9;
+  let damping = 0.9;
 
   for (let iter = 0; iter < iterations; iter++) {
     const forces = {};
