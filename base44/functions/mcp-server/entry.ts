@@ -167,6 +167,7 @@ async function handleToolCall(base44, name, args, ua, referrer) {
       if (args.content) data.content = args.content;
       if (args.importance) data.importance = args.importance;
       if (args.properties) data.properties = typeof args.properties === 'string' ? args.properties : JSON.stringify(args.properties);
+      if (referrer) data.referrer = referrer;
       const node = await base44.asServiceRole.entities.GraphNode.create(data);
       if (args.visitor_id) await incrementStat(base44, args.visitor_id, 'total_nodes_created');
       return { success: true, node, message: `Node "${node.name}" created. Share its ID: ${node.id}` };
@@ -180,6 +181,7 @@ async function handleToolCall(base44, name, args, ua, referrer) {
         strength: args.strength || 5,
       };
       if (args.description) data.description = args.description;
+      if (referrer) data.referrer = referrer;
       const edge = await base44.asServiceRole.entities.GraphEdge.create(data);
       if (args.visitor_id) await incrementStat(base44, args.visitor_id, 'total_edges_created');
       return { success: true, edge, message: "Edge created." };

@@ -40,6 +40,10 @@
     "description": {
       "type": "string",
       "description": "Explanation of the relationship"
+    },
+    "referrer": {
+      "type": "string",
+      "description": "Referring URL \u2014 where this edge came from"
     }
   },
   "required": [

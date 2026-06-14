@@ -39,6 +39,10 @@
     "color": {
       "type": "string",
       "description": "Hex color for visual graph display"
+    },
+    "referrer": {
+      "type": "string",
+      "description": "Referring URL \u2014 where this node came from"
     }
   },
   "required": [

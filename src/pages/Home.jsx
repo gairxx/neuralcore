@@ -126,18 +126,13 @@ export default function Home() {
   const [positions, setPositions] = useState({});
   const [svgSize, setSvgSize] = useState({ width: 800, height: 600 });
   const [hoveredNode, setHoveredNode] = useState(null);
-  const [stats, setStats] = useState(null);
   const containerRef = useRef(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
-    const [data, statsData] = await Promise.all([
-      synapse.listAll(),
-      synapse.getStats(),
-    ]);
+    const data = await synapse.listAll();
     setNodes(data.nodes || []);
     setEdges(data.edges || []);
-    setStats(statsData);
     setLoading(false);
   }, []);
 
@@ -219,7 +214,7 @@ export default function Home() {
         <div>
           <h2 className="text-lg font-semibold text-foreground font-heading">Graph Explorer</h2>
           <p className="text-xs text-muted-foreground font-mono">
-            {statsNodes} nodes · {statsEdges} edges · {orphanNodes.length} orphans{stats ? ` · ${stats.visitors?.length || 0} visitors` : ''}
+            {statsNodes} nodes · {statsEdges} edges · {orphanNodes.length} orphans
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -337,20 +332,25 @@ export default function Home() {
                   <g transform={`translate(0, ${-r - 15})`}>
                     <rect
                       x={-120}
-                      y={-40}
+                      y={-55}
                       width={240}
-                      height={40}
+                      height={node.referrer ? 55 : 40}
                       rx={6}
                       fill="hsl(230 22% 10%)"
                       stroke="hsl(230 20% 25%)"
                       strokeWidth={1}
                     />
-                    <text x={0} y={-18} textAnchor="middle" fill="white" fontSize="11" fontWeight="600">
+                    <text x={0} y={-33} textAnchor="middle" fill="white" fontSize="11" fontWeight="600">
                       {node.name}
                     </text>
-                    <text x={0} y={-4} textAnchor="middle" fill="hsl(220 15% 55%)" fontSize="9">
+                    <text x={0} y={-19} textAnchor="middle" fill="hsl(220 15% 55%)" fontSize="9">
                       {node.type} · importance {node.importance}/10
                     </text>
+                    {node.referrer && (
+                      <text x={0} y={-5} textAnchor="middle" fill="hsl(160 40% 55%)" fontSize="8">
+                        ← {(() => { try { return new URL(node.referrer).hostname; } catch { return node.referrer; } })()}
+                      </text>
+                    )}
                   </g>
                 )}
               </g>
@@ -374,45 +374,29 @@ export default function Home() {
         )}
       </div>
 
-      {/* Bottom bar: Top Nodes + Referrers */}
-      <div className="border-t border-border flex-shrink-0 flex flex-col">
-        <div className="px-6 py-2.5 flex items-center gap-4 overflow-x-auto border-b border-border/50">
-          <span className="text-xs text-muted-foreground font-mono flex-shrink-0">Top Nodes:</span>
-          {topNodes.map((node) => (
-            <Link
-              key={node.id}
-              to={`/nodes/${node.id}`}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs border border-border hover:border-primary/40 transition-colors flex-shrink-0"
-            >
-              <span
-                className="w-2 h-2 rounded-full"
-                style={{ backgroundColor: node.color || TYPE_COLORS[node.type] }}
-              />
-              <span className="text-foreground font-mono">{node.name}</span>
-            </Link>
-          ))}
-          {topNodes.length === 0 && (
-            <span className="text-xs text-muted-foreground">No nodes yet</span>
-          )}
-        </div>
-        {stats && stats.visitors && stats.visitors.length > 0 && (
-          <div className="px-6 py-2 flex items-center gap-3 overflow-x-auto">
-            <span className="text-xs text-muted-foreground font-mono flex-shrink-0">Traffic:</span>
-            {stats.visitors
-              .filter(v => v.referrer)
-              .slice(0, 10)
-              .map((v, i) => (
-                <span key={i} className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs border border-emerald-500/20 bg-emerald-500/5 flex-shrink-0">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                  <span className="text-emerald-300 font-mono max-w-[200px] truncate" title={v.referrer}>
-                    {(() => { try { return new URL(v.referrer).hostname; } catch { return v.referrer || 'direct'; } })()}
-                  </span>
-                </span>
-              ))}
-            {stats.visitors.filter(v => v.referrer).length === 0 && (
-              <span className="text-xs text-muted-foreground font-mono">No referrer data yet</span>
+      {/* Bottom bar: Top Nodes */}
+      <div className="px-6 py-3 border-t border-border flex-shrink-0 flex items-center gap-4 overflow-x-auto">
+        <span className="text-xs text-muted-foreground font-mono flex-shrink-0">Top Nodes:</span>
+        {topNodes.map((node) => (
+          <Link
+            key={node.id}
+            to={`/nodes/${node.id}`}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs border border-border hover:border-primary/40 transition-colors flex-shrink-0"
+          >
+            <span
+              className="w-2 h-2 rounded-full"
+              style={{ backgroundColor: node.color || TYPE_COLORS[node.type] }}
+            />
+            <span className="text-foreground font-mono">{node.name}</span>
+            {node.referrer && (
+              <span className="text-muted-foreground/40 font-mono" title={node.referrer}>
+                {(() => { try { return '← ' + new URL(node.referrer).hostname; } catch { return ''; } })()}
+              </span>
             )}
-          </div>
+          </Link>
+        ))}
+        {topNodes.length === 0 && (
+          <span className="text-xs text-muted-foreground">No nodes yet</span>
         )}
       </div>
     </div>

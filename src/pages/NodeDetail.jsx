@@ -200,6 +200,11 @@ export default function NodeDetail() {
             <span className="px-2 py-0.5 rounded-full text-xs bg-muted text-muted-foreground">
               importance: {node.importance}/10
             </span>
+            {node.referrer && (
+              <span className="px-2 py-0.5 rounded-full text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono" title={node.referrer}>
+                ← {(() => { try { return new URL(node.referrer).hostname; } catch { return node.referrer; } })()}
+              </span>
+            )}
           </div>
         </div>
 
@@ -316,6 +321,11 @@ export default function NodeDetail() {
                     {edge.description && (
                       <p className="text-xs text-muted-foreground mt-1">{edge.description}</p>
                     )}
+                    {edge.referrer && (
+                      <p className="text-xs text-emerald-400/60 mt-1 font-mono" title={edge.referrer}>
+                        ← {(() => { try { return new URL(edge.referrer).hostname; } catch { return edge.referrer; } })()}
+                      </p>
+                    )}
                   </div>
                 );
               })}
@@ -360,6 +370,11 @@ export default function NodeDetail() {
                     </div>
                     {edge.description && (
                       <p className="text-xs text-muted-foreground mt-1">{edge.description}</p>
+                    )}
+                    {edge.referrer && (
+                      <p className="text-xs text-emerald-400/60 mt-1 font-mono" title={edge.referrer}>
+                        ← {(() => { try { return new URL(edge.referrer).hostname; } catch { return edge.referrer; } })()}
+                      </p>
                     )}
                   </div>
                 );

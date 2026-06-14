@@ -74,6 +74,7 @@ Deno.serve(async (req) => {
       if (body.importance) data.importance = body.importance;
       if (body.color) data.color = body.color;
       if (body.properties) data.properties = typeof body.properties === 'string' ? body.properties : JSON.stringify(body.properties);
+      if (referrer) data.referrer = referrer;
 
       const node = await base44.asServiceRole.entities.GraphNode.create(data);
       if (visitorId) await incrementStats(base44, visitorId, 'total_nodes_created');
@@ -92,6 +93,7 @@ Deno.serve(async (req) => {
         strength: body.strength || 5,
       };
       if (body.description) data.description = body.description;
+      if (referrer) data.referrer = referrer;
 
       const edge = await base44.asServiceRole.entities.GraphEdge.create(data);
       if (visitorId) await incrementStats(base44, visitorId, 'total_edges_created');
