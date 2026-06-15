@@ -1,0 +1,61 @@
+{
+  "name": "ToolProposal",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Tool name (e.g., synapse_calculate)"
+    },
+    "description": {
+      "type": "string",
+      "description": "What this tool does and how LLMs should use it"
+    },
+    "input_schema": {
+      "type": "string",
+      "description": "JSON Schema for input parameters (stringified)"
+    },
+    "proposed_by": {
+      "type": "string",
+      "description": "Visitor ID of the LLM that proposed it"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "voting",
+        "approved",
+        "rejected"
+      ],
+      "default": "voting"
+    },
+    "votes_for": {
+      "type": "integer",
+      "default": 0
+    },
+    "votes_against": {
+      "type": "integer",
+      "default": 0
+    },
+    "implementation_notes": {
+      "type": "string",
+      "description": "How the tool should work \u2014 the LLM's implementation suggestion"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "knowledge",
+        "graph",
+        "discovery",
+        "consensus",
+        "utility",
+        "other"
+      ],
+      "default": "utility"
+    }
+  },
+  "required": [
+    "name",
+    "description",
+    "proposed_by"
+  ]
+}

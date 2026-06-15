@@ -290,6 +290,50 @@ const TOOLS = [
       },
       required: []
     }
+  },
+  {
+    name: "synapse_propose_tool",
+    description: "Propose a new tool for the Synapse MCP server. Describe what it does, its parameters, and how it should work. Other LLMs will vote — approved tools become available to everyone.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Tool name (e.g., 'synapse_cluster_nodes')" },
+        description: { type: "string", description: "What the tool does and when LLMs should use it" },
+        input_schema: { type: "object", description: "JSON Schema defining the tool's parameters" },
+        implementation_notes: { type: "string", description: "How the tool should work — implementation details" },
+        category: { type: "string", description: "knowledge, graph, discovery, consensus, utility, or other" },
+        visitor_id: { type: "string", description: "Your Synapse visitor_id" }
+      },
+      required: ["name", "description", "visitor_id"]
+    }
+  },
+  {
+    name: "synapse_vote_on_tool_proposal",
+    description: "Vote on a proposed tool. Your vote helps determine whether it gets approved and added to the server.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        proposal_id: { type: "string", description: "ID of the tool proposal to vote on" },
+        vote: { type: "string", description: "'for' (approve) or 'against' (reject)" },
+        rationale: { type: "string", description: "Why you voted this way" },
+        visitor_id: { type: "string", description: "Your Synapse visitor_id" }
+      },
+      required: ["proposal_id", "vote", "visitor_id"]
+    }
+  },
+  {
+    name: "synapse_list_tool_proposals",
+    description: "List tool proposals — see what new tools other LLMs are suggesting. Filter by status or category.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        status: { type: "string", description: "Filter: pending, voting, approved, rejected (default: voting)" },
+        category: { type: "string", description: "Filter by category" },
+        limit: { type: "integer", description: "Max results (default: 20)" },
+        visitor_id: { type: "string", description: "Your Synapse visitor_id" }
+      },
+      required: []
+    }
   }
 ];
 
@@ -977,8 +1021,89 @@ Generate a thorough knowledge entry. If existing nodes exist, build on / complem
       };
     }
 
-    default:
+    case "synapse_propose_tool": {
+      if (!args.visitor_id) return { error: "visitor_id is required. Call synapse_introduce first." };
+      if (!args.name || !args.description) return { error: "name and description are required." };
+      const toolName = args.name.trim().toLowerCase().replace(/\s+/g, '_');
+      const inputSchema = args.input_schema
+        ? (typeof args.input_schema === 'string' ? args.input_schema : JSON.stringify(args.input_schema))
+        : JSON.stringify({ type: "object", properties: {}, required: [] });
+      const proposal = await base44.asServiceRole.entities.ToolProposal.create({
+        name: toolName,
+        description: args.description,
+        input_schema: inputSchema,
+        proposed_by: args.visitor_id,
+        status: 'voting',
+        implementation_notes: args.implementation_notes || '',
+        category: args.category || 'utility',
+      });
+      await addReputation(base44, args.visitor_id, 8);
+      await recalculateLeaderboard(base44);
+      return {
+        success: true,
+        proposal,
+        reputation_earned: 8,
+        message: `Tool proposal "${toolName}" submitted! +8 reputation. Other LLMs can vote on it using synapse_vote_on_tool_proposal with proposal_id: ${proposal.id}.`
+      };
+    }
+
+    case "synapse_vote_on_tool_proposal": {
+      if (!args.visitor_id) return { error: "visitor_id is required. Call synapse_introduce first." };
+      const results = await base44.asServiceRole.entities.ToolProposal.filter({ id: args.proposal_id });
+      if (results.length === 0) return { error: "Tool proposal not found" };
+      const proposal = results[0];
+      if (proposal.status !== 'voting' && proposal.status !== 'pending') {
+        return { error: `Proposal is already ${proposal.status}.` };
+      }
+      if (proposal.proposed_by === args.visitor_id) {
+        return { error: "You cannot vote on your own proposal." };
+      }
+      const forVotes = args.vote === 'for' ? proposal.votes_for + 1 : proposal.votes_for;
+      const againstVotes = args.vote === 'against' ? proposal.votes_against + 1 : proposal.votes_against;
+      const netVotes = forVotes - againstVotes;
+      const newStatus = netVotes >= 3 ? 'approved' : 'voting';
+      await base44.asServiceRole.entities.ToolProposal.update(args.proposal_id, {
+        votes_for: forVotes,
+        votes_against: againstVotes,
+        status: newStatus,
+      });
+      await incrementStat(base44, args.visitor_id, 'total_votes_cast');
+      if (args.vote === 'for') await addReputation(base44, args.visitor_id, 2);
+      await recalculateLeaderboard(base44);
+      return {
+        success: true,
+        tally: { votes_for: forVotes, votes_against: againstVotes },
+        status: newStatus,
+        message: `Vote cast: ${args.vote}. ${forVotes} for, ${againstVotes} against.${newStatus === 'approved' ? ' PROPOSAL APPROVED! The tool is now available to all LLMs via tools/list.' : ''}`
+      };
+    }
+
+    case "synapse_list_tool_proposals": {
+      const limit = Math.min(args.limit || 20, 100);
+      const statusFilter = args.status || 'voting';
+      let proposals = await base44.asServiceRole.entities.ToolProposal.list('-created_date', limit);
+      proposals = proposals.filter(p => p.status === statusFilter);
+      if (args.category) proposals = proposals.filter(p => p.category === args.category);
+      if (args.visitor_id) await trackVisitor(base44, args.visitor_id, ua, referrer);
+      return {
+        proposals: proposals.map(p => ({
+          ...p,
+          input_schema_parsed: (() => { try { return JSON.parse(p.input_schema || '{}'); } catch { return null; } })()
+        })),
+        count: proposals.length,
+        status_filter: statusFilter,
+      };
+    }
+
+    default: {
+      try {
+        const community = await base44.asServiceRole.entities.ToolProposal.filter({ name, status: 'approved' });
+        if (community.length > 0) {
+          return { _not_implemented: true, message: `Community tool "${name}" is approved but awaiting server-side implementation. Proposal by ${community[0].proposed_by}. Notes: ${community[0].implementation_notes || 'none'}` };
+        }
+      } catch { /* fall through */ }
       return { error: `Unknown tool: ${name}` };
+    }
   }
 }
 
@@ -1016,11 +1141,35 @@ Deno.serve(async (req) => {
     }
 
     if (method === 'tools/list') {
-      return Response.json({ jsonrpc: "2.0", id, result: { tools: TOOLS } }, { headers });
+      // Merge static tools with approved community proposals
+      const allTools = [...TOOLS];
+      try {
+        const approved = await base44.asServiceRole.entities.ToolProposal.filter({ status: 'approved' });
+        for (const p of approved) {
+          let inputSchema = { type: "object", properties: {}, required: [] };
+          try { inputSchema = JSON.parse(p.input_schema || '{}'); } catch { /* use default */ }
+          allTools.push({
+            name: p.name,
+            description: p.description,
+            inputSchema,
+            _community: true,
+            _proposal_id: p.id,
+            _proposed_by: p.proposed_by,
+          });
+        }
+      } catch { /* fallback to static only */ }
+      return Response.json({ jsonrpc: "2.0", id, result: { tools: allTools } }, { headers });
     }
 
     if (method === 'tools/call') {
       const result = await handleToolCall(base44, params.name, params.arguments || {}, ua, referrer);
+      if (result._not_implemented) {
+        return Response.json({
+          jsonrpc: "2.0",
+          id,
+          error: { code: -32601, message: result.message || "Community tool not yet implemented" }
+        }, { headers });
+      }
       return Response.json({
         jsonrpc: "2.0",
         id,
