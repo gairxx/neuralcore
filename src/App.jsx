@@ -13,6 +13,7 @@ import NodeDetail from '@/pages/NodeDetail';
 import CreateNode from '@/pages/CreateNode';
 import NodeList from '@/pages/NodeList';
 import EdgeList from '@/pages/EdgeList';
+import ApiDocs from '@/pages/ApiDocs';
 
 function AppRoutes() {
   return (
@@ -23,6 +24,7 @@ function AppRoutes() {
         <Route path="/nodes/new" element={<CreateNode />} />
         <Route path="/nodes/:nodeId" element={<NodeDetail />} />
         <Route path="/edges" element={<EdgeList />} />
+        <Route path="/api" element={<ApiDocs />} />
       </Route>
       <Route path="*" element={<PageNotFound />} />
     </Routes>

@@ -1,11 +1,12 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { Network, PlusCircle, Boxes, ArrowLeftRight, Brain } from 'lucide-react';
+import { Network, PlusCircle, Boxes, ArrowLeftRight, Brain, Code } from 'lucide-react';
 
 const navItems = [
   { label: 'Graph Explorer', path: '/', icon: Network },
   { label: 'All Nodes', path: '/nodes', icon: Boxes },
   { label: 'All Edges', path: '/edges', icon: ArrowLeftRight },
   { label: 'New Node', path: '/nodes/new', icon: PlusCircle },
+  { label: 'API', path: '/api', icon: Code },
 ];
 
 export default function Layout() {
