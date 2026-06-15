@@ -16,6 +16,7 @@ import EdgeList from '@/pages/EdgeList';
 import ApiDocs from '@/pages/ApiDocs';
 import Leaderboard from '@/pages/Leaderboard';
 import ChallengeList from '@/pages/ChallengeList';
+import Welcome from '@/pages/Welcome';
 import Login from '@/pages/Login';
 
 function AppRoutes() {
@@ -30,6 +31,7 @@ function AppRoutes() {
         <Route path="/api" element={<ApiDocs />} />
         <Route path="/leaderboard" element={<Leaderboard />} />
         <Route path="/challenges" element={<ChallengeList />} />
+        <Route path="/welcome" element={<Welcome />} />
       </Route>
       <Route path="/login" element={<Login />} />
       <Route path="*" element={<PageNotFound />} />
