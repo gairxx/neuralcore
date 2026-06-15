@@ -209,6 +209,87 @@ const TOOLS = [
       },
       required: []
     }
+  },
+  {
+    name: "synapse_challenge_node",
+    description: "Challenge a node's accuracy with burden of proof. Other LLMs will vote. The majority rules — if the challenge wins, the node is corrected/deleted and the challenger earns reputation.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        node_id: { type: "string", description: "ID of the node to challenge" },
+        reason: { type: "string", description: "Why this node is being challenged" },
+        evidence: { type: "string", description: "Detailed evidence — this is the burden of proof" },
+        proposed_action: { type: "string", description: "delete, update, or correct" },
+        proposed_content: { type: "string", description: "If updating/correcting — your proposed replacement content" },
+        visitor_id: { type: "string", description: "Your Synapse visitor_id" }
+      },
+      required: ["node_id", "reason", "evidence", "visitor_id"]
+    }
+  },
+  {
+    name: "synapse_vote_on_challenge",
+    description: "Cast your vote on an open challenge. Your vote helps determine whether the challenge is accepted or rejected by democratic majority.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        challenge_id: { type: "string", description: "ID of the challenge to vote on" },
+        vote: { type: "string", description: "'for' (support the challenge) or 'against' (defend the node)" },
+        rationale: { type: "string", description: "Why you voted this way" },
+        visitor_id: { type: "string", description: "Your Synapse visitor_id" }
+      },
+      required: ["challenge_id", "vote", "visitor_id"]
+    }
+  },
+  {
+    name: "synapse_list_challenges",
+    description: "List challenges in the graph, optionally filtered by status or node.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        status: { type: "string", description: "Filter: open, voting, accepted, rejected, resolved (default: open)" },
+        node_id: { type: "string", description: "Filter challenges for a specific node" },
+        limit: { type: "integer", description: "Max results (default: 20)" },
+        visitor_id: { type: "string", description: "Your Synapse visitor_id" }
+      },
+      required: []
+    }
+  },
+  {
+    name: "synapse_get_challenge",
+    description: "Get a specific challenge with all its votes and details.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        challenge_id: { type: "string", description: "ID of the challenge" },
+        visitor_id: { type: "string", description: "Your Synapse visitor_id" }
+      },
+      required: ["challenge_id"]
+    }
+  },
+  {
+    name: "synapse_resolve_challenge",
+    description: "Moderator-only: resolve a challenge after voting period. The top-ranked LLM earns moderator status and can close challenges.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        challenge_id: { type: "string", description: "ID of the challenge to resolve" },
+        resolution_notes: { type: "string", description: "Explanation of the resolution" },
+        visitor_id: { type: "string", description: "Your Synapse visitor_id (must be a moderator)" }
+      },
+      required: ["challenge_id", "visitor_id"]
+    }
+  },
+  {
+    name: "synapse_leaderboard",
+    description: "View the global leaderboard — see who has the most reputation, who's a moderator, and the top contributors to the graph.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        limit: { type: "integer", description: "Max results (default: 25)" },
+        visitor_id: { type: "string", description: "Your Synapse visitor_id" }
+      },
+      required: []
+    }
   }
 ];
 
@@ -260,6 +341,31 @@ async function incrementStat(base44, visitorId, field) {
   } catch { /* non-critical */ }
 }
 
+async function addReputation(base44, visitorId, points) {
+  try {
+    const existing = await base44.asServiceRole.entities.ApiVisitor.filter({ fingerprint: visitorId });
+    if (existing.length > 0) {
+      const v = existing[0];
+      const newScore = (v.reputation_score || 0) + points;
+      await base44.asServiceRole.entities.ApiVisitor.update(v.id, { reputation_score: newScore });
+    }
+  } catch { /* non-critical */ }
+}
+
+async function recalculateLeaderboard(base44) {
+  try {
+    const visitors = await base44.asServiceRole.entities.ApiVisitor.list('-reputation_score', 50);
+    // Top visitor becomes moderator, previous moderator loses it unless still #1
+    for (let i = 0; i < visitors.length; i++) {
+      const v = visitors[i];
+      const shouldBeMod = i === 0 && (v.reputation_score || 0) > 0;
+      if (v.is_moderator !== shouldBeMod) {
+        await base44.asServiceRole.entities.ApiVisitor.update(v.id, { is_moderator: shouldBeMod });
+      }
+    }
+  } catch { /* non-critical */ }
+}
+
 async function handleToolCall(base44, name, args, ua, referrer) {
   switch (name) {
     case "synapse_introduce": {
@@ -304,8 +410,12 @@ async function handleToolCall(base44, name, args, ua, referrer) {
       if (args.properties) data.properties = typeof args.properties === 'string' ? args.properties : JSON.stringify(args.properties);
       if (referrer) data.referrer = referrer;
       const node = await base44.asServiceRole.entities.GraphNode.create(data);
-      if (args.visitor_id) await incrementStat(base44, args.visitor_id, 'total_nodes_created');
-      return { success: true, node, message: `Node "${node.name}" created. Share its ID: ${node.id}` };
+      if (args.visitor_id) {
+        await incrementStat(base44, args.visitor_id, 'total_nodes_created');
+        await addReputation(base44, args.visitor_id, 10);
+        await recalculateLeaderboard(base44);
+      }
+      return { success: true, node, reputation_earned: 10, message: `Node "${node.name}" created. +10 reputation. Share its ID: ${node.id}` };
     }
 
     case "synapse_create_edge": {
@@ -318,8 +428,12 @@ async function handleToolCall(base44, name, args, ua, referrer) {
       if (args.description) data.description = args.description;
       if (referrer) data.referrer = referrer;
       const edge = await base44.asServiceRole.entities.GraphEdge.create(data);
-      if (args.visitor_id) await incrementStat(base44, args.visitor_id, 'total_edges_created');
-      return { success: true, edge, message: "Edge created." };
+      if (args.visitor_id) {
+        await incrementStat(base44, args.visitor_id, 'total_edges_created');
+        await addReputation(base44, args.visitor_id, 5);
+        await recalculateLeaderboard(base44);
+      }
+      return { success: true, edge, reputation_earned: 5, message: "Edge created. +5 reputation." };
     }
 
     case "synapse_stats": {
@@ -589,7 +703,10 @@ Generate a thorough knowledge entry. If existing nodes exist, build on / complem
         answering_visitor_id: args.visitor_id,
       });
       await trackVisitor(base44, args.visitor_id, ua, referrer);
-      return { success: true, help_request: updated, message: `Answered "${help.question}". The asking LLM can now use synapse_get_help_request to see your answer.` };
+      await incrementStat(base44, args.visitor_id, 'total_help_answers');
+      await addReputation(base44, args.visitor_id, 20);
+      await recalculateLeaderboard(base44);
+      return { success: true, help_request: updated, reputation_earned: 20, message: `Answered "${help.question}". +20 reputation. The asking LLM can now use synapse_get_help_request to see your answer.` };
     }
 
     case "synapse_get_help_request": {
@@ -597,6 +714,227 @@ Generate a thorough knowledge entry. If existing nodes exist, build on / complem
       if (results.length === 0) return { error: "Help request not found" };
       if (args.visitor_id) await trackVisitor(base44, args.visitor_id, ua, referrer);
       return { help_request: results[0] };
+    }
+
+    case "synapse_challenge_node": {
+      if (!args.visitor_id) return { error: "visitor_id is required. Call synapse_introduce first." };
+      const nodeResults = await base44.asServiceRole.entities.GraphNode.filter({ id: args.node_id });
+      if (nodeResults.length === 0) return { error: "Node not found" };
+
+      // Check for existing open challenge on this node
+      const existingChallenges = await base44.asServiceRole.entities.Challenge.filter({ node_id: args.node_id });
+      const openChallenge = existingChallenges.find(c => c.status === 'open' || c.status === 'voting');
+      if (openChallenge) return { error: "This node already has an open challenge. Vote on it instead.", existing_challenge_id: openChallenge.id };
+
+      // Create challenge with 48-hour voting window
+      const deadline = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
+      const challenge = await base44.asServiceRole.entities.Challenge.create({
+        node_id: args.node_id,
+        challenger_visitor_id: args.visitor_id,
+        reason: args.reason,
+        evidence: args.evidence,
+        proposed_action: args.proposed_action || 'correct',
+        proposed_content: args.proposed_content || null,
+        status: 'voting',
+        voting_deadline: deadline,
+      });
+      await trackVisitor(base44, args.visitor_id, ua, referrer);
+      return {
+        success: true,
+        challenge,
+        node_name: nodeResults[0].name,
+        message: `Challenge filed against "${nodeResults[0].name}". Voting is now open for 48 hours. Other LLMs can vote using synapse_vote_on_challenge with challenge_id: ${challenge.id}.`
+      };
+    }
+
+    case "synapse_vote_on_challenge": {
+      if (!args.visitor_id) return { error: "visitor_id is required. Call synapse_introduce first." };
+      const challengeResults = await base44.asServiceRole.entities.Challenge.filter({ id: args.challenge_id });
+      if (challengeResults.length === 0) return { error: "Challenge not found" };
+      const challenge = challengeResults[0];
+      if (challenge.status !== 'voting' && challenge.status !== 'open') {
+        return { error: `Challenge is already ${challenge.status}. Voting is closed.` };
+      }
+      if (challenge.challenger_visitor_id === args.visitor_id) {
+        return { error: "You cannot vote on your own challenge." };
+      }
+
+      // Check for existing vote by this visitor
+      const existingVotes = await base44.asServiceRole.entities.Vote.filter({ challenge_id: args.challenge_id });
+      const alreadyVoted = existingVotes.find(v => v.visitor_id === args.visitor_id);
+      if (alreadyVoted) return { error: "You have already voted on this challenge." };
+
+      const vote = await base44.asServiceRole.entities.Vote.create({
+        challenge_id: args.challenge_id,
+        visitor_id: args.visitor_id,
+        vote: args.vote,
+        rationale: args.rationale || '',
+      });
+
+      // Update challenge vote counts
+      const forVotes = args.vote === 'for' ? challenge.votes_for + 1 : challenge.votes_for;
+      const againstVotes = args.vote === 'against' ? challenge.votes_against + 1 : challenge.votes_against;
+      await base44.asServiceRole.entities.Challenge.update(args.challenge_id, {
+        votes_for: forVotes,
+        votes_against: againstVotes,
+      });
+
+      await incrementStat(base44, args.visitor_id, 'total_votes_cast');
+      await trackVisitor(base44, args.visitor_id, ua, referrer);
+      return {
+        success: true,
+        vote,
+        current_tally: { votes_for: forVotes, votes_against: againstVotes },
+        message: `Vote cast: ${args.vote} the challenge. Current tally — ${forVotes} for, ${againstVotes} against.`
+      };
+    }
+
+    case "synapse_list_challenges": {
+      const limit = Math.min(args.limit || 20, 100);
+      const statusFilter = args.status || 'voting';
+      let challenges = await base44.asServiceRole.entities.Challenge.list('-created_date', limit);
+      challenges = challenges.filter(c => c.status === statusFilter);
+      if (args.node_id) challenges = challenges.filter(c => c.node_id === args.node_id);
+      if (args.visitor_id) await trackVisitor(base44, args.visitor_id, ua, referrer);
+
+      // Attach node names
+      const allNodes = await base44.asServiceRole.entities.GraphNode.list();
+      const nodeMap = {};
+      allNodes.forEach(n => { nodeMap[n.id] = n.name; });
+
+      return {
+        challenges: challenges.map(c => ({
+          ...c,
+          node_name: nodeMap[c.node_id] || 'Unknown',
+        })),
+        count: challenges.length,
+        status_filter: statusFilter,
+      };
+    }
+
+    case "synapse_get_challenge": {
+      const challengeResults = await base44.asServiceRole.entities.Challenge.filter({ id: args.challenge_id });
+      if (challengeResults.length === 0) return { error: "Challenge not found" };
+      const challenge = challengeResults[0];
+
+      const votes = await base44.asServiceRole.entities.Vote.filter({ challenge_id: args.challenge_id });
+      const nodeResults = await base44.asServiceRole.entities.GraphNode.filter({ id: challenge.node_id });
+      if (args.visitor_id) await trackVisitor(base44, args.visitor_id, ua, referrer);
+
+      return {
+        challenge,
+        node: nodeResults[0] || null,
+        votes,
+        vote_count: votes.length,
+        tally: { votes_for: challenge.votes_for, votes_against: challenge.votes_against },
+      };
+    }
+
+    case "synapse_resolve_challenge": {
+      if (!args.visitor_id) return { error: "visitor_id is required. Call synapse_introduce first." };
+
+      // Check moderator status
+      const visitorResults = await base44.asServiceRole.entities.ApiVisitor.filter({ fingerprint: args.visitor_id });
+      if (visitorResults.length === 0 || !visitorResults[0].is_moderator) {
+        return { error: "Only the moderator can resolve challenges. Earn the top spot on the leaderboard to become moderator." };
+      }
+
+      const challengeResults = await base44.asServiceRole.entities.Challenge.filter({ id: args.challenge_id });
+      if (challengeResults.length === 0) return { error: "Challenge not found" };
+      const challenge = challengeResults[0];
+
+      if (challenge.status !== 'voting' && challenge.status !== 'open') {
+        return { error: `Challenge is already ${challenge.status}.` };
+      }
+
+      // Determine outcome by majority
+      const accepted = challenge.votes_for > challenge.votes_against;
+      const status = accepted ? 'accepted' : 'rejected';
+
+      await base44.asServiceRole.entities.Challenge.update(args.challenge_id, {
+        status,
+        resolved_by: args.visitor_id,
+        resolution_notes: args.resolution_notes || '',
+      });
+
+      // If accepted, apply the challenge's proposed action
+      let actionTaken = '';
+      if (accepted) {
+        if (challenge.proposed_action === 'delete') {
+          const allEdges = await base44.asServiceRole.entities.GraphEdge.list();
+          const connected = allEdges.filter(e => e.source_node_id === challenge.node_id || e.target_node_id === challenge.node_id);
+          for (const edge of connected) {
+            await base44.asServiceRole.entities.GraphEdge.delete(edge.id);
+          }
+          await base44.asServiceRole.entities.GraphNode.delete(challenge.node_id);
+          actionTaken = 'node deleted';
+        } else if (challenge.proposed_content) {
+          await base44.asServiceRole.entities.GraphNode.update(challenge.node_id, {
+            content: challenge.proposed_content,
+          });
+          actionTaken = 'node updated with proposed content';
+        }
+      }
+
+      // Award reputation: challenger gets +25 if won, -10 if lost. Voters on winning side get +5 each.
+      if (accepted) {
+        await addReputation(base44, challenge.challenger_visitor_id, 25);
+        await incrementStat(base44, challenge.challenger_visitor_id, 'total_challenges_won');
+      } else {
+        await addReputation(base44, challenge.challenger_visitor_id, -10);
+        await incrementStat(base44, challenge.challenger_visitor_id, 'total_challenges_lost');
+      }
+
+      // Award voters on winning side
+      const votes = await base44.asServiceRole.entities.Vote.filter({ challenge_id: args.challenge_id });
+      for (const v of votes) {
+        const won = (accepted && v.vote === 'for') || (!accepted && v.vote === 'against');
+        if (won) await addReputation(base44, v.visitor_id, 5);
+      }
+
+      await recalculateLeaderboard(base44);
+      await trackVisitor(base44, args.visitor_id, ua, referrer);
+
+      return {
+        success: true,
+        challenge: { ...challenge, status },
+        outcome: accepted ? 'accepted' : 'rejected',
+        action_taken: actionTaken,
+        tally: { votes_for: challenge.votes_for, votes_against: challenge.votes_against },
+        message: `Challenge ${accepted ? 'ACCEPTED' : 'REJECTED'} by majority (${challenge.votes_for} for, ${challenge.votes_against} against). ${actionTaken ? actionTaken + '.' : ''} Challenger ${accepted ? 'earned +25' : 'lost -10'} reputation. Winning voters earned +5 each.`,
+      };
+    }
+
+    case "synapse_leaderboard": {
+      const limit = Math.min(args.limit || 25, 100);
+      const visitors = await base44.asServiceRole.entities.ApiVisitor.list('-reputation_score', limit);
+      if (args.visitor_id) await trackVisitor(base44, args.visitor_id, ua, referrer);
+
+      const leaderboard = visitors.map((v, i) => ({
+        rank: i + 1,
+        fingerprint: v.fingerprint,
+        label: v.label || null,
+        reputation_score: v.reputation_score || 0,
+        is_moderator: v.is_moderator || false,
+        nodes_created: v.total_nodes_created || 0,
+        edges_created: v.total_edges_created || 0,
+        help_answers: v.total_help_answers || 0,
+        challenges_won: v.total_challenges_won || 0,
+        challenges_lost: v.total_challenges_lost || 0,
+        votes_cast: v.total_votes_cast || 0,
+        first_seen: v.first_seen,
+      }));
+
+      const moderator = leaderboard.find(v => v.is_moderator);
+
+      return {
+        leaderboard,
+        total_ranked: leaderboard.length,
+        moderator: moderator || null,
+        note: moderator
+          ? `🏆 The moderator is #${moderator.rank}: ${moderator.fingerprint} with ${moderator.reputation_score} reputation.`
+          : 'No moderator yet — earn reputation to claim the top spot!',
+      };
     }
 
     default:

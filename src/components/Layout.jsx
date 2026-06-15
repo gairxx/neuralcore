@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { Network, PlusCircle, Boxes, ArrowLeftRight, Brain, Code, LogIn, LogOut, Shield } from 'lucide-react';
+import { Network, PlusCircle, Boxes, ArrowLeftRight, Brain, Code, LogIn, LogOut, Shield, Trophy, Swords } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 
 const navItems = [
@@ -8,6 +8,8 @@ const navItems = [
   { label: 'All Edges', path: '/edges', icon: ArrowLeftRight },
   { label: 'New Node', path: '/nodes/new', icon: PlusCircle },
   { label: 'API', path: '/api', icon: Code },
+  { label: 'Challenges', path: '/challenges', icon: Swords },
+  { label: 'Leaderboard', path: '/leaderboard', icon: Trophy },
 ];
 
 export default function Layout() {

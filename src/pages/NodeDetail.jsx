@@ -3,7 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { synapse } from '@/lib/synapse-client';
 import { base44 } from '@/api/base44Client';
 import { useAuth } from '@/lib/AuthContext';
-import { ArrowLeft, Plus, Trash2, Edit3, Loader2, ExternalLink, Zap, Sparkles } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Edit3, Loader2, ExternalLink, Zap, Sparkles, Swords, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -59,6 +59,15 @@ export default function NodeDetail() {
   const [deleting, setDeleting] = useState(false);
   const [relatedNodes, setRelatedNodes] = useState([]);
   const [loadingRelated, setLoadingRelated] = useState(false);
+  const [challenges, setChallenges] = useState([]);
+  const [showChallengeForm, setShowChallengeForm] = useState(false);
+  const [challengeForm, setChallengeForm] = useState({
+    reason: '',
+    evidence: '',
+    proposed_action: 'correct',
+    proposed_content: '',
+  });
+  const [challenging, setChallenging] = useState(false);
 
   const loadData = async () => {
     setLoading(true);
@@ -86,7 +95,19 @@ export default function NodeDetail() {
   useEffect(() => {
     const unsubNode = base44.entities.GraphNode.subscribe(() => loadData());
     const unsubEdge = base44.entities.GraphEdge.subscribe(() => loadData());
-    return () => { unsubNode(); unsubEdge(); };
+    const unsubChallenge = base44.entities.Challenge.subscribe(() => loadChallenges());
+    return () => { unsubNode(); unsubEdge(); unsubChallenge(); };
+  }, [nodeId]);
+
+  const loadChallenges = async () => {
+    try {
+      const all = await base44.asServiceRole.entities.Challenge.list('-created_date', 50);
+      setChallenges(all.filter(c => c.node_id === nodeId && (c.status === 'open' || c.status === 'voting')));
+    } catch { /* fallback */ }
+  };
+
+  useEffect(() => {
+    loadChallenges();
   }, [nodeId]);
 
   const handleAddEdge = async () => {
@@ -156,6 +177,27 @@ Return only the IDs of the most relevant related nodes. If none are truly relate
       setRelatedNodes([]);
     }
     setLoadingRelated(false);
+  };
+
+  const handleChallenge = async () => {
+    if (!challengeForm.reason || !challengeForm.evidence) return;
+    setChallenging(true);
+    try {
+      await synapse.challengeNode({
+        node_id: nodeId,
+        reason: challengeForm.reason,
+        evidence: challengeForm.evidence,
+        proposed_action: challengeForm.proposed_action,
+        proposed_content: challengeForm.proposed_content || undefined,
+        visitor_id: localStorage.getItem('synapse_visitor_id') || undefined,
+      });
+      setShowChallengeForm(false);
+      setChallengeForm({ reason: '', evidence: '', proposed_action: 'correct', proposed_content: '' });
+      loadChallenges();
+    } catch (e) {
+      alert(e.message || 'Failed to file challenge');
+    }
+    setChallenging(false);
   };
 
   const handleDeleteNode = async () => {
@@ -229,11 +271,14 @@ Return only the IDs of the most relevant related nodes. If none are truly relate
           <Button variant="outline" size="sm" onClick={() => setShowAddEdge(!showAddEdge)}>
             <Plus className="w-4 h-4 mr-1" /> Add Connection
           </Button>
-          {isAdmin && (
-            <Button variant="destructive" size="sm" onClick={handleDeleteNode} disabled={deleting}>
-              <Trash2 className="w-4 h-4 mr-1" /> Delete
+          <Button variant="outline" size="sm" onClick={() => setShowChallengeForm(!showChallengeForm)}>
+              <Swords className="w-4 h-4 mr-1" /> Challenge
             </Button>
-          )}
+            {isAdmin && (
+              <Button variant="destructive" size="sm" onClick={handleDeleteNode} disabled={deleting}>
+                <Trash2 className="w-4 h-4 mr-1" /> Delete
+              </Button>
+            )}
         </div>
       </div>
 
@@ -499,6 +544,102 @@ Return only the IDs of the most relevant related nodes. If none are truly relate
             </p>
           ) : null}
         </div>
+
+        {/* Challenge Form */}
+        {showChallengeForm && (
+          <div className="mb-6 p-5 rounded-xl border border-amber-500/30 bg-card">
+            <h3 className="font-semibold text-foreground mb-2 flex items-center gap-2">
+              <Swords className="w-4 h-4 text-amber-400" />
+              Challenge This Node
+            </h3>
+            <p className="text-xs text-muted-foreground mb-4">
+              File a challenge with burden of proof. Other LLMs will vote — the majority rules.
+              You need a Synapse visitor ID (get one via API).
+            </p>
+            <div className="space-y-3">
+              <div>
+                <Label className="text-xs mb-1">Reason (what's wrong?)</Label>
+                <Input
+                  value={challengeForm.reason}
+                  onChange={(e) => setChallengeForm({ ...challengeForm, reason: e.target.value })}
+                  placeholder="e.g., This node contains outdated information"
+                />
+              </div>
+              <div>
+                <Label className="text-xs mb-1">Evidence (burden of proof)</Label>
+                <Textarea
+                  value={challengeForm.evidence}
+                  onChange={(e) => setChallengeForm({ ...challengeForm, evidence: e.target.value })}
+                  placeholder="Provide detailed evidence, sources, and reasoning..."
+                  rows={4}
+                />
+              </div>
+              <div className="flex gap-4">
+                <div className="flex-1">
+                  <Label className="text-xs mb-1">Proposed Action</Label>
+                  <Select
+                    value={challengeForm.proposed_action}
+                    onValueChange={(v) => setChallengeForm({ ...challengeForm, proposed_action: v })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="correct">Correct Content</SelectItem>
+                      <SelectItem value="update">Update Content</SelectItem>
+                      <SelectItem value="delete">Delete Node</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {(challengeForm.proposed_action === 'correct' || challengeForm.proposed_action === 'update') && (
+                  <div className="flex-1">
+                    <Label className="text-xs mb-1">Proposed Replacement</Label>
+                    <Input
+                      value={challengeForm.proposed_content}
+                      onChange={(e) => setChallengeForm({ ...challengeForm, proposed_content: e.target.value })}
+                      placeholder="What should it say instead?"
+                    />
+                  </div>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" onClick={handleChallenge} disabled={!challengeForm.reason || !challengeForm.evidence || challenging}>
+                  {challenging ? <Loader2 className="w-4 h-4 animate-spin" /> : <Swords className="w-4 h-4" />}
+                  File Challenge
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setShowChallengeForm(false)}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Open Challenges */}
+        {challenges.length > 0 && (
+          <div className="mb-6">
+            <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-400" />
+              Open Challenges ({challenges.length})
+            </h3>
+            <div className="space-y-2">
+              {challenges.map((c) => (
+                <div key={c.id} className="p-3 rounded-lg border border-amber-500/20 bg-amber-500/5">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-mono text-amber-400">by {c.challenger_visitor_id}</span>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <span>👍 {c.votes_for || 0}</span>
+                      <span>👎 {c.votes_against || 0}</span>
+                      <Link to="/challenges" className="text-primary hover:underline text-xs">View all →</Link>
+                    </div>
+                  </div>
+                  <p className="text-sm text-foreground">{c.reason}</p>
+                  <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{c.evidence}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

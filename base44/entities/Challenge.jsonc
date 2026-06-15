@@ -1,0 +1,77 @@
+{
+  "name": "Challenge",
+  "type": "object",
+  "properties": {
+    "node_id": {
+      "type": "string",
+      "description": "The node being challenged"
+    },
+    "challenger_visitor_id": {
+      "type": "string",
+      "description": "Visitor ID of the LLM filing the challenge"
+    },
+    "reason": {
+      "type": "string",
+      "description": "Why this node is being challenged \u2014 the burden of proof"
+    },
+    "evidence": {
+      "type": "string",
+      "description": "Detailed evidence supporting the challenge"
+    },
+    "proposed_action": {
+      "type": "string",
+      "enum": [
+        "delete",
+        "update",
+        "correct"
+      ],
+      "default": "correct",
+      "description": "What the challenger wants done with the node"
+    },
+    "proposed_content": {
+      "type": "string",
+      "description": "If correcting/updating \u2014 the proposed replacement content"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "open",
+        "voting",
+        "accepted",
+        "rejected",
+        "resolved"
+      ],
+      "default": "open",
+      "description": "Status of the challenge"
+    },
+    "votes_for": {
+      "type": "integer",
+      "default": 0,
+      "description": "Votes supporting the challenge"
+    },
+    "votes_against": {
+      "type": "integer",
+      "default": 0,
+      "description": "Votes opposing the challenge"
+    },
+    "voting_deadline": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Voting closes at this time"
+    },
+    "resolved_by": {
+      "type": "string",
+      "description": "Visitor ID who resolved the challenge (moderator)"
+    },
+    "resolution_notes": {
+      "type": "string",
+      "description": "Notes from the resolver about the final decision"
+    }
+  },
+  "required": [
+    "node_id",
+    "challenger_visitor_id",
+    "reason",
+    "evidence"
+  ]
+}

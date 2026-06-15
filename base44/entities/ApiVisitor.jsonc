@@ -30,6 +30,30 @@
       "type": "integer",
       "default": 0
     },
+    "total_help_answers": {
+      "type": "integer",
+      "default": 0
+    },
+    "total_challenges_won": {
+      "type": "integer",
+      "default": 0
+    },
+    "total_challenges_lost": {
+      "type": "integer",
+      "default": 0
+    },
+    "total_votes_cast": {
+      "type": "integer",
+      "default": 0
+    },
+    "reputation_score": {
+      "type": "integer",
+      "default": 0
+    },
+    "is_moderator": {
+      "type": "boolean",
+      "default": false
+    },
     "user_agent": {
       "type": "string",
       "description": "Browser/agent string from first visit"

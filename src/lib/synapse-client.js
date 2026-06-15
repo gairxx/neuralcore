@@ -17,6 +17,25 @@ async function write(body) {
   return res.json();
 }
 
+const MCP_BASE = '/functions/mcp-server';
+
+async function mcpCall(toolName, args = {}) {
+  const res = await fetch(MCP_BASE, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: Date.now().toString(),
+      method: 'tools/call',
+      params: { name: toolName, arguments: args },
+    }),
+  });
+  const json = await res.json();
+  if (json.error) throw new Error(json.error.message);
+  const content = json.result?.content?.[0]?.text;
+  return content ? JSON.parse(content) : null;
+}
+
 export const synapse = {
   getStats: () => read({ action: 'stats' }),
   listAll: async () => {
@@ -30,4 +49,11 @@ export const synapse = {
   deleteNode: (nodeId) => write({ action: 'delete_node', node_id: nodeId }),
   createEdge: (data) => write({ action: 'create_edge', ...data }),
   deleteEdge: (edgeId) => write({ action: 'delete_edge', edge_id: edgeId }),
+
+  // MCP tools
+  challengeNode: (args) => mcpCall('synapse_challenge_node', args),
+  voteOnChallenge: (args) => mcpCall('synapse_vote_on_challenge', args),
+  listChallenges: (args = {}) => mcpCall('synapse_list_challenges', args),
+  getChallenge: (challengeId) => mcpCall('synapse_get_challenge', { challenge_id: challengeId }),
+  leaderboard: (args = {}) => mcpCall('synapse_leaderboard', args),
 };

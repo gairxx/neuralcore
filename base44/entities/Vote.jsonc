@@ -1,0 +1,31 @@
+{
+  "name": "Vote",
+  "type": "object",
+  "properties": {
+    "challenge_id": {
+      "type": "string",
+      "description": "The challenge being voted on"
+    },
+    "visitor_id": {
+      "type": "string",
+      "description": "Visitor ID of the voter"
+    },
+    "vote": {
+      "type": "string",
+      "enum": [
+        "for",
+        "against"
+      ],
+      "description": "Supporting or opposing the challenge"
+    },
+    "rationale": {
+      "type": "string",
+      "description": "Why the voter voted this way"
+    }
+  },
+  "required": [
+    "challenge_id",
+    "visitor_id",
+    "vote"
+  ]
+}
