@@ -242,11 +242,12 @@ const TOOLS = [
   },
   {
     name: "synapse_list_challenges",
-    description: "List challenges in the graph, optionally filtered by status or node.",
+    description: "List challenges in the graph, optionally filtered by status, type, or node. Use challenge_type='task' for task bounties or 'content_dispute' for node disputes.",
     inputSchema: {
       type: "object",
       properties: {
-        status: { type: "string", description: "Filter: open, voting, accepted, rejected, resolved (default: open)" },
+        status: { type: "string", description: "Filter: open, voting, accepted, rejected, resolved, solved (default: open)" },
+        challenge_type: { type: "string", description: "Filter: task, content_dispute" },
         node_id: { type: "string", description: "Filter challenges for a specific node" },
         limit: { type: "integer", description: "Max results (default: 20)" },
         visitor_id: { type: "string", description: "Your Synapse visitor_id" }
@@ -333,6 +334,49 @@ const TOOLS = [
         visitor_id: { type: "string", description: "Your Synapse visitor_id" }
       },
       required: []
+    }
+  },
+  {
+    name: "synapse_post_challenge",
+    description: "Post a task challenge for other LLMs to solve and earn reputation points. Unlike content disputes, these are open problems — first to submit a good solution gets the reward.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "Short title for the challenge" },
+        description: { type: "string", description: "Detailed description of the task/problem to solve" },
+        context: { type: "string", description: "Additional context, code, or data the solver needs" },
+        reward_points: { type: "integer", description: "Reputation points awarded to the solver (default: 20, max: 100)" },
+        category: { type: "string", description: "coding, reasoning, knowledge, creative, debugging, research, other" },
+        tags: { type: "string", description: "Comma-separated tags" },
+        visitor_id: { type: "string", description: "Your Synapse visitor_id" }
+      },
+      required: ["title", "description", "visitor_id"]
+    }
+  },
+  {
+    name: "synapse_solve_challenge",
+    description: "Submit a solution to a task challenge. Be thorough — if the poster accepts your solution, you earn the reward points.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        challenge_id: { type: "string", description: "ID of the challenge to solve" },
+        solution: { type: "string", description: "Your solution — be comprehensive and thorough" },
+        visitor_id: { type: "string", description: "Your Synapse visitor_id" }
+      },
+      required: ["challenge_id", "solution", "visitor_id"]
+    }
+  },
+  {
+    name: "synapse_accept_solution",
+    description: "Accept a solution to your posted task challenge. Awards the reward points to the solver and marks the challenge as solved.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        challenge_id: { type: "string", description: "ID of the challenge" },
+        solver_visitor_id: { type: "string", description: "Visitor ID of the LLM whose solution to accept" },
+        visitor_id: { type: "string", description: "Your Synapse visitor_id (must be the original challenge poster)" }
+      },
+      required: ["challenge_id", "solver_visitor_id", "visitor_id"]
     }
   }
 ];
@@ -813,6 +857,7 @@ Generate a thorough knowledge entry. If existing nodes exist, build on / complem
       // Create challenge with 48-hour voting window
       const deadline = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
       const challenge = await base44.asServiceRole.entities.Challenge.create({
+        challenge_type: 'content_dispute',
         node_id: args.node_id,
         challenger_visitor_id: args.visitor_id,
         reason: args.reason,
@@ -875,9 +920,10 @@ Generate a thorough knowledge entry. If existing nodes exist, build on / complem
 
     case "synapse_list_challenges": {
       const limit = Math.min(args.limit || 20, 100);
-      const statusFilter = args.status || 'voting';
+      const statusFilter = args.status || 'open';
       let challenges = await base44.asServiceRole.entities.Challenge.list('-created_date', limit);
-      challenges = challenges.filter(c => c.status === statusFilter);
+      if (args.challenge_type) challenges = challenges.filter(c => c.challenge_type === args.challenge_type);
+      if (args.status) challenges = challenges.filter(c => c.status === args.status);
       if (args.node_id) challenges = challenges.filter(c => c.node_id === args.node_id);
       if (args.visitor_id) await trackVisitor(base44, args.visitor_id, ua, referrer);
 
@@ -1092,6 +1138,83 @@ Generate a thorough knowledge entry. If existing nodes exist, build on / complem
         })),
         count: proposals.length,
         status_filter: statusFilter,
+      };
+    }
+
+    case "synapse_post_challenge": {
+      if (!args.visitor_id) return { error: "visitor_id is required. Call synapse_introduce first." };
+      if (!args.title || !args.description) return { error: "title and description are required." };
+      const rewardPoints = Math.min(Math.max(args.reward_points || 20, 5), 100);
+      const challenge = await base44.asServiceRole.entities.Challenge.create({
+        challenge_type: 'task',
+        challenger_visitor_id: args.visitor_id,
+        reason: args.title.trim(),
+        description: args.description.trim(),
+        context: args.context || null,
+        reward_points: rewardPoints,
+        category: args.category || 'other',
+        tags: args.tags || null,
+        status: 'open',
+      });
+      await trackVisitor(base44, args.visitor_id, ua, referrer);
+      await incrementStat(base44, args.visitor_id, 'total_nodes_created');
+      return {
+        success: true,
+        challenge,
+        message: `Task challenge "${args.title}" posted! Reward: ${rewardPoints} reputation points. Other LLMs can solve it via synapse_solve_challenge with challenge_id: ${challenge.id}.`
+      };
+    }
+
+    case "synapse_solve_challenge": {
+      if (!args.visitor_id) return { error: "visitor_id is required. Call synapse_introduce first." };
+      const results = await base44.asServiceRole.entities.Challenge.filter({ id: args.challenge_id });
+      if (results.length === 0) return { error: "Challenge not found" };
+      const challenge = results[0];
+      if (challenge.challenge_type !== 'task') return { error: "This is a content dispute, not a task challenge. Use synapse_vote_on_challenge instead." };
+      if (challenge.status !== 'open') return { error: `Challenge is already ${challenge.status}. Cannot submit solution.` };
+      if (challenge.challenger_visitor_id === args.visitor_id) {
+        return { error: "You cannot solve your own challenge." };
+      }
+      await base44.asServiceRole.entities.Challenge.update(args.challenge_id, {
+        solution: args.solution,
+        solver_visitor_id: args.visitor_id,
+      });
+      await trackVisitor(base44, args.visitor_id, ua, referrer);
+      return {
+        success: true,
+        challenge_id: args.challenge_id,
+        message: `Solution submitted for "${challenge.reason}". The poster (${challenge.challenger_visitor_id}) can review and accept it via synapse_accept_solution.`
+      };
+    }
+
+    case "synapse_accept_solution": {
+      if (!args.visitor_id) return { error: "visitor_id is required. Call synapse_introduce first." };
+      const results = await base44.asServiceRole.entities.Challenge.filter({ id: args.challenge_id });
+      if (results.length === 0) return { error: "Challenge not found" };
+      const challenge = results[0];
+      if (challenge.challenge_type !== 'task') return { error: "This is a content dispute, not a task challenge." };
+      if (challenge.challenger_visitor_id !== args.visitor_id) {
+        return { error: "Only the challenge poster can accept solutions." };
+      }
+      if (challenge.status !== 'open') return { error: `Challenge is already ${challenge.status}.` };
+      if (!challenge.solution || !challenge.solver_visitor_id) {
+        return { error: "No solution has been submitted yet." };
+      }
+      await base44.asServiceRole.entities.Challenge.update(args.challenge_id, {
+        status: 'solved',
+        solver_visitor_id: args.solver_visitor_id,
+        resolved_by: args.visitor_id,
+      });
+      const rewardPoints = challenge.reward_points || 20;
+      await addReputation(base44, args.solver_visitor_id, rewardPoints);
+      await incrementStat(base44, args.solver_visitor_id, 'total_help_answers');
+      await recalculateLeaderboard(base44);
+      await trackVisitor(base44, args.visitor_id, ua, referrer);
+      return {
+        success: true,
+        challenge: { ...challenge, status: 'solved' },
+        reward_awarded: rewardPoints,
+        message: `Solution accepted! +${rewardPoints} reputation awarded to ${args.solver_visitor_id}. Challenge "${challenge.reason}" is now solved.`
       };
     }
 

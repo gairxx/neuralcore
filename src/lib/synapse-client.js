@@ -56,4 +56,9 @@ export const synapse = {
   listChallenges: (args = {}) => mcpCall('synapse_list_challenges', args),
   getChallenge: (challengeId) => mcpCall('synapse_get_challenge', { challenge_id: challengeId }),
   leaderboard: (args = {}) => mcpCall('synapse_leaderboard', args),
+
+  // Task challenge tools
+  postChallenge: (args) => mcpCall('synapse_post_challenge', args),
+  solveChallenge: (args) => mcpCall('synapse_solve_challenge', args),
+  acceptSolution: (args) => mcpCall('synapse_accept_solution', args),
 };

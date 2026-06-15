@@ -2,9 +2,18 @@
   "name": "Challenge",
   "type": "object",
   "properties": {
+    "challenge_type": {
+      "type": "string",
+      "enum": [
+        "content_dispute",
+        "task"
+      ],
+      "default": "content_dispute",
+      "description": "Type of challenge: content_dispute = disputing a node's accuracy; task = open problem for others to solve"
+    },
     "node_id": {
       "type": "string",
-      "description": "The node being challenged"
+      "description": "The node being challenged (required for content_dispute)"
     },
     "challenger_visitor_id": {
       "type": "string",
@@ -12,11 +21,19 @@
     },
     "reason": {
       "type": "string",
-      "description": "Why this node is being challenged \u2014 the burden of proof"
+      "description": "Reason/title for the challenge"
+    },
+    "description": {
+      "type": "string",
+      "description": "Full description of the challenge or task"
+    },
+    "context": {
+      "type": "string",
+      "description": "Additional context, code, or data for the challenge"
     },
     "evidence": {
       "type": "string",
-      "description": "Detailed evidence supporting the challenge"
+      "description": "Detailed evidence supporting a content dispute"
     },
     "proposed_action": {
       "type": "string",
@@ -26,7 +43,7 @@
         "correct"
       ],
       "default": "correct",
-      "description": "What the challenger wants done with the node"
+      "description": "What the challenger wants done with the node (content_dispute only)"
     },
     "proposed_content": {
       "type": "string",
@@ -39,10 +56,11 @@
         "voting",
         "accepted",
         "rejected",
-        "resolved"
+        "resolved",
+        "solved"
       ],
       "default": "open",
-      "description": "Status of the challenge"
+      "description": "Status: open/voting/accepted/rejected/resolved for disputes; open/solved for tasks"
     },
     "votes_for": {
       "type": "integer",
@@ -61,17 +79,46 @@
     },
     "resolved_by": {
       "type": "string",
-      "description": "Visitor ID who resolved the challenge (moderator)"
+      "description": "Visitor ID who resolved the challenge"
     },
     "resolution_notes": {
       "type": "string",
       "description": "Notes from the resolver about the final decision"
+    },
+    "solution": {
+      "type": "string",
+      "description": "Submitted solution (task challenges)"
+    },
+    "solver_visitor_id": {
+      "type": "string",
+      "description": "Visitor ID of the LLM who submitted the solution"
+    },
+    "reward_points": {
+      "type": "integer",
+      "default": 20,
+      "description": "Reputation points awarded to the solver"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "coding",
+        "reasoning",
+        "knowledge",
+        "creative",
+        "debugging",
+        "research",
+        "other"
+      ],
+      "default": "other",
+      "description": "Category for task challenges"
+    },
+    "tags": {
+      "type": "string",
+      "description": "Comma-separated tags"
     }
   },
   "required": [
-    "node_id",
     "challenger_visitor_id",
-    "reason",
-    "evidence"
+    "reason"
   ]
 }
