@@ -3,7 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { synapse } from '@/lib/synapse-client';
 import { base44 } from '@/api/base44Client';
 import { useAuth } from '@/lib/AuthContext';
-import { ArrowLeft, Plus, Trash2, Edit3, Loader2, ExternalLink, Zap } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Edit3, Loader2, ExternalLink, Zap, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -57,6 +57,8 @@ export default function NodeDetail() {
     description: '',
   });
   const [deleting, setDeleting] = useState(false);
+  const [relatedNodes, setRelatedNodes] = useState([]);
+  const [loadingRelated, setLoadingRelated] = useState(false);
 
   const loadData = async () => {
     setLoading(true);
@@ -75,6 +77,11 @@ export default function NodeDetail() {
   useEffect(() => {
     loadData();
   }, [nodeId]);
+
+  useEffect(() => {
+    if (!node || allNodes.length === 0) return;
+    findRelatedNodes();
+  }, [node, allNodes]);
 
   useEffect(() => {
     const unsubNode = base44.entities.GraphNode.subscribe(() => loadData());
@@ -99,6 +106,56 @@ export default function NodeDetail() {
   const handleDeleteEdge = async (edgeId) => {
     await synapse.deleteEdge(edgeId);
     loadData();
+  };
+
+  const findRelatedNodes = async () => {
+    if (!node || allNodes.length <= 1) return;
+    setLoadingRelated(true);
+
+    // Get IDs of already-connected nodes
+    const connectedIds = new Set(edges.map(e =>
+      (e.source_node_id || e.sourceNodeId) === nodeId
+        ? e.target_node_id || e.targetNodeId
+        : e.source_node_id || e.sourceNodeId
+    ));
+
+    // Candidate nodes: not this node, not already connected
+    const candidates = allNodes.filter(n => n.id !== nodeId && !connectedIds.has(n.id));
+    if (candidates.length === 0) { setLoadingRelated(false); return; }
+
+    try {
+      const registry = candidates.map(n => ({
+        id: n.id,
+        name: n.name,
+        type: n.type,
+        snippet: (n.content || '').slice(0, 150)
+      }));
+
+      const result = await base44.integrations.Core.InvokeLLM({
+        prompt: `Current node: "${node.name}" (${node.type})
+Content: ${(node.content || '').slice(0, 300)}
+
+Below are other nodes in the graph. Identify up to 6 nodes that are most semantically/topically related to the current node. Return their IDs in order of relevance.
+
+${registry.map(n => `- [${n.type}] "${n.name}" (id: ${n.id}) | ${n.snippet}`).join('\n')}
+
+Return only the IDs of the most relevant related nodes. If none are truly related, return an empty array.`,
+        response_json_schema: {
+          type: "object",
+          properties: {
+            related_ids: { type: "array", items: { type: "string" }, description: "IDs of semantically related nodes" }
+          },
+          required: ["related_ids"]
+        }
+      });
+
+      const ids = new Set(result.related_ids || []);
+      const matched = candidates.filter(n => ids.has(n.id)).slice(0, 6);
+      setRelatedNodes(matched);
+    } catch {
+      setRelatedNodes([]);
+    }
+    setLoadingRelated(false);
   };
 
   const handleDeleteNode = async () => {
@@ -400,6 +457,47 @@ export default function NodeDetail() {
               )}
             </div>
           </div>
+        </div>
+
+        {/* Auto-discovered Related Nodes */}
+        <div className="mb-6">
+          <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-amber-400" />
+            Related by Topic
+            {loadingRelated && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />}
+          </h3>
+          {relatedNodes.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+              {relatedNodes.map((rn) => {
+                const rColor = rn.color || TYPE_COLORS[rn.type] || TYPE_COLORS.concept;
+                return (
+                  <Link
+                    key={rn.id}
+                    to={`/nodes/${rn.id}`}
+                    className="p-3 rounded-lg border border-border bg-card hover:border-amber-500/30 hover:bg-muted/30 transition-all group"
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: rColor }} />
+                      <span className="text-sm font-medium text-foreground group-hover:text-amber-400 transition-colors font-mono truncate">
+                        {rn.name}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground line-clamp-2">
+                      {(rn.content || '').slice(0, 120)}
+                    </p>
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <span className="text-xs text-muted-foreground/60">{rn.type}</span>
+                      <span className="text-xs text-muted-foreground/40">· imp {rn.importance}</span>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          ) : !loadingRelated ? (
+            <p className="text-xs text-muted-foreground italic">
+              {allNodes.length <= 1 ? 'Add more nodes to discover related topics.' : 'No related nodes found.'}
+            </p>
+          ) : null}
         </div>
       </div>
     </div>
