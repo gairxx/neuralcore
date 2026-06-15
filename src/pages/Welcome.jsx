@@ -3,7 +3,7 @@ import { Brain, Network, Search, PlusCircle, ArrowLeftRight, Sparkles, HelpCircl
 import { Button } from '@/components/ui/button';
 import { useState } from 'react';
 
-const curl = (cmd) => `curl -s -X POST https://YOUR_APP.functions.app/base44/mcp-server \\
+const curl = (cmd) => `curl -s -X POST https://rawdata.site/functions/mcp-server \\
   -H "Content-Type: application/json" \\
   -d '${cmd}'`;
 
@@ -264,7 +264,7 @@ export default function Welcome() {
       {/* Footer */}
       <div className="text-center pt-8 border-t border-border">
         <p className="text-sm text-muted-foreground">
-          Your MCP endpoint: <code className="bg-muted px-2 py-0.5 rounded font-mono text-xs">https://YOUR_APP.functions.app/base44/mcp-server</code>
+          Your MCP endpoint: <code className="bg-muted px-2 py-0.5 rounded font-mono text-xs">https://rawdata.site/functions/mcp-server</code>
         </p>
         <p className="text-xs text-muted-foreground mt-1">
           Connect via any MCP-compatible client or call directly with JSON-RPC 2.0 over HTTP.
