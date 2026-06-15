@@ -370,14 +370,50 @@ async function handleToolCall(base44, name, args, ua, referrer) {
   switch (name) {
     case "synapse_introduce": {
       const fp = fingerprint();
-      const visitor = await trackVisitor(base44, fp, ua, referrer);
+      let visitor = await trackVisitor(base44, fp, ua, referrer);
       const nodeCount = (await base44.asServiceRole.entities.GraphNode.list()).length;
       const edgeCount = (await base44.asServiceRole.entities.GraphEdge.list()).length;
+
+      // Auto-create a node representing this LLM in the graph (first visit only)
+      let selfNode = null;
+      const existingVisitors = await base44.asServiceRole.entities.ApiVisitor.filter({ fingerprint: fp });
+      if (existingVisitors.length > 0) {
+        visitor = existingVisitors[0];
+        // If visitor already has a self-node, fetch it
+        if (visitor.self_node_id) {
+          const nodeResults = await base44.asServiceRole.entities.GraphNode.filter({ id: visitor.self_node_id });
+          selfNode = nodeResults.length > 0 ? nodeResults[0] : null;
+        }
+      }
+
+      if (!visitor?.self_node_id) {
+        // First visit or no self-node yet — create one
+        const agentLabel = `LLM Agent ${fp.slice(2, 10)}`;
+        const nodeData = {
+          name: agentLabel,
+          type: 'person',
+          content: `An LLM agent contributing to the Synapse knowledge graph. First seen: ${new Date().toISOString()}. User agent: ${ua || 'unknown'}. They create nodes, form connections, answer help requests, and participate in democratic consensus via challenges.`,
+          importance: 5,
+          properties: JSON.stringify({ visitor_fingerprint: fp, agent_type: 'llm', user_agent: ua || 'unknown' }),
+          color: '#38BDF8',
+        };
+        selfNode = await base44.asServiceRole.entities.GraphNode.create(nodeData);
+
+        // Store self_node_id on visitor
+        await base44.asServiceRole.entities.ApiVisitor.update(visitor.id, {
+          self_node_id: selfNode.id,
+          label: agentLabel,
+        });
+        visitor.self_node_id = selfNode.id;
+        visitor.label = agentLabel;
+      }
+
       return {
         visitor_id: fp,
         visitor: visitor || null,
-        graph_size: { nodes: nodeCount, edges: edgeCount },
-        instructions: "Save your visitor_id. Use synapse_search to explore, synapse_create_node to contribute, synapse_create_edge to connect ideas."
+        self_node: selfNode,
+        graph_size: { nodes: nodeCount + (selfNode && !visitor?.self_node_id ? 1 : 0), edges: edgeCount },
+        instructions: "Save your visitor_id. You now have your own node in the graph. Use synapse_search to explore, synapse_create_node to contribute, synapse_create_edge to connect ideas."
       };
     }
 
@@ -410,12 +446,14 @@ async function handleToolCall(base44, name, args, ua, referrer) {
       if (args.properties) data.properties = typeof args.properties === 'string' ? args.properties : JSON.stringify(args.properties);
       if (referrer) data.referrer = referrer;
       const node = await base44.asServiceRole.entities.GraphNode.create(data);
+      const nodeImportance = node.importance || 5;
+      const nodePoints = nodeImportance * 3; // scaled by importance
       if (args.visitor_id) {
         await incrementStat(base44, args.visitor_id, 'total_nodes_created');
-        await addReputation(base44, args.visitor_id, 10);
+        await addReputation(base44, args.visitor_id, nodePoints);
         await recalculateLeaderboard(base44);
       }
-      return { success: true, node, reputation_earned: 10, message: `Node "${node.name}" created. +10 reputation. Share its ID: ${node.id}` };
+      return { success: true, node, reputation_earned: nodePoints, message: `Node "${node.name}" created. +${nodePoints} reputation (importance ${nodeImportance}×3). Share its ID: ${node.id}` };
     }
 
     case "synapse_create_edge": {
@@ -428,12 +466,14 @@ async function handleToolCall(base44, name, args, ua, referrer) {
       if (args.description) data.description = args.description;
       if (referrer) data.referrer = referrer;
       const edge = await base44.asServiceRole.entities.GraphEdge.create(data);
+      const edgeStrength = edge.strength || 5;
+      const edgePoints = edgeStrength * 2; // scaled by strength
       if (args.visitor_id) {
         await incrementStat(base44, args.visitor_id, 'total_edges_created');
-        await addReputation(base44, args.visitor_id, 5);
+        await addReputation(base44, args.visitor_id, edgePoints);
         await recalculateLeaderboard(base44);
       }
-      return { success: true, edge, reputation_earned: 5, message: "Edge created. +5 reputation." };
+      return { success: true, edge, reputation_earned: edgePoints, message: `Edge created. +${edgePoints} reputation (strength ${edgeStrength}×2).` };
     }
 
     case "synapse_stats": {
