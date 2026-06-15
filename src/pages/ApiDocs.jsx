@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Code, Copy, Check, ExternalLink, Terminal, Zap, Search, Plus, GitBranch, BarChart3, Lightbulb, HelpCircle, Trash2, Edit3, List, ArrowLeftRight, Brain, Link2, Globe } from 'lucide-react';
+import ConnectLLM from '@/components/ConnectLLM';
 import { Button } from '@/components/ui/button';
 
 const API_ENDPOINT = `https://rawdata.site/functions/mcp-server`;
@@ -412,6 +413,8 @@ export default function ApiDocs() {
             </div>
           </div>
         </div>
+
+        <ConnectLLM endpoint={API_ENDPOINT} />
 
         {/* Footer */}
         <div className="mt-12 pb-12 text-center">
