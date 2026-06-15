@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { synapse } from '@/lib/synapse-client';
 import { base44 } from '@/api/base44Client';
+import { useAuth } from '@/lib/AuthContext';
 import { ArrowLeft, Plus, Trash2, Edit3, Loader2, ExternalLink, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -42,6 +43,8 @@ const RELATIONSHIP_LABELS = {
 export default function NodeDetail() {
   const { nodeId } = useParams();
   const navigate = useNavigate();
+  const { user, isAuthenticated } = useAuth();
+  const isAdmin = user?.role === 'admin';
   const [node, setNode] = useState(null);
   const [edges, setEdges] = useState([]);
   const [allNodes, setAllNodes] = useState([]);
@@ -169,9 +172,11 @@ export default function NodeDetail() {
           <Button variant="outline" size="sm" onClick={() => setShowAddEdge(!showAddEdge)}>
             <Plus className="w-4 h-4 mr-1" /> Add Connection
           </Button>
-          <Button variant="destructive" size="sm" onClick={handleDeleteNode} disabled={deleting}>
-            <Trash2 className="w-4 h-4 mr-1" /> Delete
-          </Button>
+          {isAdmin && (
+            <Button variant="destructive" size="sm" onClick={handleDeleteNode} disabled={deleting}>
+              <Trash2 className="w-4 h-4 mr-1" /> Delete
+            </Button>
+          )}
         </div>
       </div>
 
@@ -320,9 +325,11 @@ export default function NodeDetail() {
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-muted-foreground">str {edge.strength}</span>
-                        <button onClick={() => handleDeleteEdge(edge.id)} className="text-muted-foreground hover:text-destructive">
-                          <Trash2 className="w-3 h-3" />
-                        </button>
+                        {isAdmin && (
+                          <button onClick={() => handleDeleteEdge(edge.id)} className="text-muted-foreground hover:text-destructive">
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        )}
                       </div>
                     </div>
                     {edge.description && (
@@ -370,9 +377,11 @@ export default function NodeDetail() {
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-muted-foreground">str {edge.strength}</span>
-                        <button onClick={() => handleDeleteEdge(edge.id)} className="text-muted-foreground hover:text-destructive">
-                          <Trash2 className="w-3 h-3" />
-                        </button>
+                        {isAdmin && (
+                          <button onClick={() => handleDeleteEdge(edge.id)} className="text-muted-foreground hover:text-destructive">
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        )}
                       </div>
                     </div>
                     {edge.description && (

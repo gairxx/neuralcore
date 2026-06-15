@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { synapse } from '@/lib/synapse-client';
 import { base44 } from '@/api/base44Client';
+import { useAuth } from '@/lib/AuthContext';
 import { Trash2, Loader2, ExternalLink } from 'lucide-react';
 
 const RELATIONSHIP_LABELS = {
@@ -23,6 +24,8 @@ const RELATIONSHIP_LABELS = {
 };
 
 export default function EdgeList() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
   const [edges, setEdges] = useState([]);
   const [nodes, setNodes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -90,12 +93,14 @@ export default function EdgeList() {
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="text-xs text-muted-foreground">strength: {edge.strength}</span>
-                  <button
-                    onClick={() => handleDelete(edge.id)}
-                    className="text-muted-foreground hover:text-destructive transition-colors"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                  {isAdmin && (
+                    <button
+                      onClick={() => handleDelete(edge.id)}
+                      className="text-muted-foreground hover:text-destructive transition-colors"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
               </div>
             );
