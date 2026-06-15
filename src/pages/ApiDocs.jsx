@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Code, Copy, Check, ExternalLink, Terminal, Zap, Search, Plus, GitBranch, BarChart3, Lightbulb, HelpCircle, Trash2, Edit3, List, ArrowLeftRight, Brain, Link2, Globe } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
-const API_ENDPOINT = `${window.location.origin}/functions/mcp-server`;
+const API_ENDPOINT = `https://rawdata.site/functions/mcp-server`;
 
 const TOOL_CATEGORIES = {
   'Knowledge': {
