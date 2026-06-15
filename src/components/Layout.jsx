@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { Network, PlusCircle, Boxes, ArrowLeftRight, Brain, Code, LogIn, LogOut, UserPlus, Shield } from 'lucide-react';
+import { Network, PlusCircle, Boxes, ArrowLeftRight, Brain, Code, LogIn, LogOut, Shield } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 
 const navItems = [
@@ -55,15 +55,15 @@ export default function Layout() {
         </nav>
 
         <div className="p-4 border-t border-border">
-          {isAuthenticated ? (
+          {isAuthenticated && isAdmin ? (
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center">
-                  <Shield className={`w-3.5 h-3.5 ${isAdmin ? 'text-primary' : 'text-muted-foreground'}`} />
+                  <Shield className="w-3.5 h-3.5 text-primary" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-medium text-foreground truncate">{user?.full_name || user?.email}</p>
-                  <p className="text-xs text-muted-foreground">{isAdmin ? 'Admin' : 'User'}</p>
+                  <p className="text-xs text-muted-foreground">Admin</p>
                 </div>
               </div>
               <button
@@ -75,22 +75,13 @@ export default function Layout() {
               </button>
             </div>
           ) : (
-            <div className="space-y-1.5">
-              <button
-                onClick={() => navigate('/login')}
-                className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-              >
-                <LogIn className="w-3.5 h-3.5" />
-                Sign In
-              </button>
-              <button
-                onClick={() => navigate('/register')}
-                className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-              >
-                <UserPlus className="w-3.5 h-3.5" />
-                Register
-              </button>
-            </div>
+            <button
+              onClick={() => navigate('/login')}
+              className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            >
+              <LogIn className="w-3.5 h-3.5" />
+              Admin
+            </button>
           )}
           <div className="text-xs text-muted-foreground mt-3 pt-3 border-t border-border">
             <p className="font-mono">Synapse v1.0</p>
