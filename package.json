@@ -1,7 +1,8 @@
 {
-  "name": "base44-app",
-  "private": true,
-  "version": "0.0.0",
+  "name": "@gairxx/neuralcore",
+  "private": false,
+  "version": "0.0.1",
+  "mcpName": "io.github.gairxx/neuralcore",
   "type": "module",
   "scripts": {
     "dev": "vite",
