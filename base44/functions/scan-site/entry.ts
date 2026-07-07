@@ -166,6 +166,11 @@ Deno.serve(async (req) => {
       scan = await base44.asServiceRole.entities.SiteScan.create(scanData);
     }
 
+    // Create/update a graph node from the scan's markdown, linked to related nodes
+    try {
+      await createScanGraphNode(base44, scan, markdown, targetUrl, domain, title);
+    } catch { /* non-fatal — scan still succeeds */ }
+
     return Response.json({ success: true, scan }, { headers: corsHeaders });
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500, headers: corsHeaders });
@@ -233,4 +238,53 @@ function htmlToMarkdown(html) {
   md = md.replace(/&#x27;/g, "'");
   md = md.replace(/\n{3,}/g, '\n\n');
   return md.trim();
+}
+
+async function createScanGraphNode(base44, scan, markdown, targetUrl, domain, title) {
+  // Find existing node for this URL (update) or create new one
+  const existingNodes = await base44.asServiceRole.entities.GraphNode.filter({ referrer: targetUrl });
+
+  const nodeData = {
+    name: title || domain,
+    type: 'custom',
+    content: markdown.slice(0, 10000),
+    importance: Math.max(1, Math.min(10, Math.ceil(scan.overall_score / 10))),
+    referrer: targetUrl,
+    properties: JSON.stringify({ domain, overall_score: scan.overall_score, scan_id: scan.id, cached: true }),
+  };
+
+  let node;
+  if (existingNodes.length > 0) {
+    node = await base44.asServiceRole.entities.GraphNode.update(existingNodes[0].id, nodeData);
+  } else {
+    node = await base44.asServiceRole.entities.GraphNode.create(nodeData);
+  }
+
+  // Link to related nodes by keyword matching — any existing node whose name appears in the scan content
+  const allNodes = await base44.asServiceRole.entities.GraphNode.list('-created_date', 200);
+  const textBlob = `${title} ${domain} ${markdown}`.toLowerCase();
+
+  const related = allNodes.filter(n =>
+    n.id !== node.id &&
+    n.referrer !== targetUrl &&
+    n.name && n.name.length > 3 &&
+    textBlob.includes(n.name.toLowerCase())
+  ).slice(0, 10);
+
+  if (related.length > 0) {
+    const existingEdges = await base44.asServiceRole.entities.GraphEdge.filter({ source_node_id: node.id });
+    const linkedIds = new Set(existingEdges.map(e => e.target_node_id));
+
+    for (const rn of related) {
+      if (linkedIds.has(rn.id)) continue;
+      await base44.asServiceRole.entities.GraphEdge.create({
+        source_node_id: node.id,
+        target_node_id: rn.id,
+        relationship_type: 'references',
+        strength: 5,
+        description: `Scan of ${domain} references "${rn.name}"`,
+        referrer: targetUrl,
+      });
+    }
+  }
 }
