@@ -1,17 +1,20 @@
-# robots.txt — Synapse Knowledge Graph (rawdata.site)
-# https://rawdata.site
-
 User-agent: *
 Allow: /
+Disallow: /nodes/
+Disallow: /edges/
 
-# Machine-readable documentation
-# https://llmstxt.org
-LLMs-txt: /llms.txt
-LLMs-full-txt: /llms-full.txt
+# LLM context files
+LLMs-txt: https://rawdata.site/llms.txt
+LLMs-full-txt: https://rawdata.site/llms-full.txt
 
 # MCP server — JSON-RPC 2.0 over HTTP
-# Send initialize → tools/list → tools/call
 MCP-endpoint: https://rawdata.site/functions/mcp-server
 
-# Sitemap
+# AI Readiness Scanner — POST a URL, get cached markdown + readiness report
+Scan-endpoint: https://rawdata.site/functions/scan-site
+
+# Agent capabilities
+Agents-json: https://rawdata.site/.well-known/agents.json
+MCP-json: https://rawdata.site/.well-known/mcp.json
+
 Sitemap: https://rawdata.site/sitemap.xml
