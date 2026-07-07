@@ -8,6 +8,8 @@ import ScrollToTop from './components/ScrollToTop';
 
 // Add page imports here
 import Layout from '@/components/Layout';
+import ScanHome from '@/pages/ScanHome';
+import ScanHistory from '@/pages/ScanHistory';
 import Home from '@/pages/Home';
 import NodeDetail from '@/pages/NodeDetail';
 import CreateNode from '@/pages/CreateNode';
@@ -23,7 +25,9 @@ function AppRoutes() {
   return (
     <Routes>
       <Route element={<Layout />}>
-        <Route path="/" element={<Home />} />
+        <Route path="/" element={<ScanHome />} />
+        <Route path="/scans" element={<ScanHistory />} />
+        <Route path="/graph" element={<Home />} />
         <Route path="/nodes" element={<NodeList />} />
         <Route path="/nodes/new" element={<CreateNode />} />
         <Route path="/nodes/:nodeId" element={<NodeDetail />} />

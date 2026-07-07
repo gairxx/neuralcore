@@ -1,0 +1,108 @@
+{
+  "name": "SiteScan",
+  "type": "object",
+  "properties": {
+    "url": {
+      "type": "string",
+      "description": "Full URL that was scanned"
+    },
+    "domain": {
+      "type": "string",
+      "description": "Domain name of the scanned site"
+    },
+    "title": {
+      "type": "string",
+      "description": "Page title extracted from HTML"
+    },
+    "description": {
+      "type": "string",
+      "description": "Meta description from HTML"
+    },
+    "markdown_content": {
+      "type": "string",
+      "description": "Cached markdown version of the page"
+    },
+    "overall_score": {
+      "type": "integer",
+      "default": 0,
+      "description": "Overall machine readiness score (0-100)"
+    },
+    "readable_score": {
+      "type": "integer",
+      "default": 0,
+      "description": "How easy for AI to read the site (0-100)"
+    },
+    "callable_score": {
+      "type": "integer",
+      "default": 0,
+      "description": "Can agents interact programmatically (0-100)"
+    },
+    "commerce_score": {
+      "type": "integer",
+      "default": 0,
+      "description": "Agent-ready commerce surface (0-100)"
+    },
+    "payment_score": {
+      "type": "integer",
+      "default": 0,
+      "description": "Payment infrastructure detected (0-100)"
+    },
+    "has_robots_txt": {
+      "type": "boolean",
+      "default": false
+    },
+    "has_llms_txt": {
+      "type": "boolean",
+      "default": false
+    },
+    "has_llms_full_txt": {
+      "type": "boolean",
+      "default": false
+    },
+    "has_agents_json": {
+      "type": "boolean",
+      "default": false
+    },
+    "has_mcp_json": {
+      "type": "boolean",
+      "default": false
+    },
+    "has_sitemap": {
+      "type": "boolean",
+      "default": false
+    },
+    "has_markdown_alternate": {
+      "type": "boolean",
+      "default": false
+    },
+    "mcp_endpoints": {
+      "type": "string",
+      "description": "JSON string of detected MCP endpoints"
+    },
+    "priority_fixes": {
+      "type": "string",
+      "description": "JSON string of priority fixes with severity"
+    },
+    "detected_docs": {
+      "type": "string",
+      "description": "JSON string of detected document URLs"
+    },
+    "scan_status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "completed",
+        "error"
+      ],
+      "default": "completed"
+    },
+    "error_message": {
+      "type": "string",
+      "description": "Error message if scan failed"
+    }
+  },
+  "required": [
+    "url",
+    "domain"
+  ]
+}
